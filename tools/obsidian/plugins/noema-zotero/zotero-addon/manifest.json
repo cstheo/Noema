@@ -1,0 +1,13 @@
+{
+  "manifest_version": 2,
+  "name": "Noema Paper Review Template",
+  "version": "0.1.0",
+  "description": "Initialize new native Zotero child notes with six paper review dimensions.",
+  "applications": {
+    "zotero": {
+      "id": "paper-review@noema.local",
+      "strict_min_version": "10.0",
+      "strict_max_version": "10.0.*"
+    }
+  }
+}

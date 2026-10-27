@@ -1,0 +1,46 @@
+[package]
+name = "Noema-mobile"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "Personal answers through Notes and daily tasks through Reminders"
+readme = "README.md"
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "noema-mobile"
+path = "src/main.rs"
+
+[dependencies]
+noema-config.workspace = true
+anyhow.workspace = true
+chrono.workspace = true
+clap.workspace = true
+fs2.workspace = true
+html5ever = "0.40"
+libc.workspace = true
+objc2 = { version = "0.6", features = ["exception"] }
+objc2-foundation = "0.3"
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSApplication", "NSRunningApplication", "NSResponder"] }
+objc2-event-kit = { version = "0.3", default-features = false, features = [
+    "std", "block2", "EKEventStore", "EKTypes", "EKObject", "EKCalendar",
+    "EKCalendarItem", "EKReminder", "EKSource",
+] }
+objc2-scripting-bridge = { version = "0.3", default-features = false, features = [
+    "std", "SBApplication", "SBObject", "SBElementArray",
+] }
+block2 = "0.6"
+dispatch2 = "0.3"
+plist.workspace = true
+regex.workspace = true
+rusqlite.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+signal-hook.workspace = true
+tempfile.workspace = true
+uuid.workspace = true
+

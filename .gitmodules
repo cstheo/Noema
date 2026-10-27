@@ -1,0 +1,42 @@
+[submodule "corpus/courses/CS229"]
+	path = corpus/courses/CS229/sources
+	url = https://github.com/cstheo/CS229.git
+[submodule "corpus/courses/MIT6.5840"]
+	path = corpus/courses/MIT6.5840/sources
+	url = https://github.com/cstheo/MIT6.5840.git
+[submodule "corpus/courses/CS61C"]
+	path = corpus/courses/CS61C/sources
+	url = https://github.com/cstheo/CS61C.git
+[submodule "corpus/courses/NJU-PA"]
+	path = corpus/courses/NJU-PA/sources
+	url = https://github.com/cstheo/NJU-PA.git
+[submodule "corpus/courses/MIT6.1810"]
+	path = corpus/courses/MIT6.1810/sources
+	url = https://github.com/cstheo/MIT6.1810.git
+[submodule "corpus/projects/RaftFS/sources"]
+	path = corpus/projects/RaftFS/sources
+	url = https://github.com/cstheo/RaftFS.git
+[submodule "corpus/projects/StarryX"]
+	path = corpus/projects/StarryX/sources
+	url = https://github.com/cstheo/StarryX.git
+[submodule "corpus/projects/Ark"]
+	path = corpus/projects/Ark/sources
+	url = https://github.com/cstheo/Ark.git
+[submodule "corpus/projects/XEMU"]
+	path = corpus/projects/XEMU/sources
+	url = https://github.com/cstheo/XEMU.git
+[submodule "corpus/projects/CS149"]
+	path = corpus/courses/CS149/sources
+	url = https://github.com/cstheo/CS149.git
+[submodule "corpus/projects/CS224n"]
+	path = corpus/courses/CS224n/sources
+	url = https://github.com/cstheo/CS224n.git
+[submodule "corpus/projects/kernel-dev"]
+	path = corpus/projects/kernel-dev/sources
+	url = https://github.com/cstheo/kernel-dev.git
+[submodule "corpus/projects/xark"]
+	path = corpus/projects/xark/sources
+	url = https://github.com/cstheo/xark.git
+[submodule "corpus/personal/dotfiles"]
+	path = corpus/projects/dotfiles/sources
+	url = https://github.com/cstheo/dotfiles.git

@@ -1,0 +1,9 @@
+{
+  "id": "noema-zotero",
+  "name": "Noema Zotero",
+  "version": "0.4.1",
+  "minAppVersion": "1.13.0",
+  "description": "Annotate vault PDFs, keep linked reading notes, and share Zotero paper annotations and notes.",
+  "author": "Noema",
+  "isDesktopOnly": true
+}

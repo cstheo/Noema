@@ -1,0 +1,31 @@
+# Shared, non-secret settings. Paths are relative to the Noema repository.
+# Restart mobile and redeploy Obsidian after changes. No data is moved or renamed.
+timezone = "Asia/Shanghai"
+locale = "en"
+
+[journal]
+folder = "corpus/personal/journal"
+format = "YYYY/MM/YYYY-MM-D"
+template = "tools/obsidian/templates/journal/Daily.md"
+
+[mobile]
+notes_folder = "Noema"
+reminders_list = "Noema"
+notes_poll_seconds = 120
+reconcile_seconds = 300
+settle_seconds = 20
+
+[agent]
+timeout_seconds = 600
+executable = "codex"
+# model = "your-model-id"
+# instructions_file = "tools/research-instructions.md" # Appended to the read-only policy.
+
+[obsidian]
+config_dir = ".obsidian"
+css_snippets = ["noema-homepage", "noema-calendar", "vault-name-center"]
+addon_output = "/private/tmp/noema-zotero-paper-review.xpi"
+
+[obsidian.zotero]
+research_folder = "corpus/research"
+refresh_seconds = 60

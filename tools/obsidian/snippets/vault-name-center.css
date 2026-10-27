@@ -1,0 +1,10 @@
+/* Keep the vault title centered in the sidebar when Blue Topaz indents the file list. */
+body.bt-toggle-colorful-folder:is(
+  .folder-style-change-options-colorful-tab-liked,
+  .folder-style-change-options-colorful-border
+) .workspace-leaf-content[data-type="file-explorer"] .nav-files-container > .nav-vault-name {
+  margin-left: -18px;
+  margin-top: 4px;
+  margin-bottom: 4px;
+  width: calc(100% + 12px);
+}

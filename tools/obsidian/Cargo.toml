@@ -1,0 +1,26 @@
+[package]
+name = "Noema-obsidian"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+description = "Deploy Noema's Obsidian resources and package its Zotero add-on"
+readme = "README.md"
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "noema-obsidian"
+path = "src/main.rs"
+
+[dependencies]
+noema-config.workspace = true
+anyhow.workspace = true
+chrono.workspace = true
+clap.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tempfile.workspace = true
+uuid.workspace = true
+zip.workspace = true

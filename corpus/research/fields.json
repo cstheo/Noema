@@ -1,0 +1,131 @@
+{
+  "schema": 1,
+  "fields": [
+    {
+      "id": "system/os",
+      "name": "Operating Systems",
+      "description": "Kernel abstractions, execution, scheduling, virtual memory and operating-system architecture.",
+      "tags": [
+        "os",
+        "operating-systems",
+        "kernel-architecture",
+        "microkernel",
+        "multikernel",
+        "unikernel",
+        "libos",
+        "exokernel"
+      ]
+    },
+    {
+      "id": "system/memory",
+      "name": "Memory Systems",
+      "description": "Memory hierarchy, coherence, NUMA, CXL and disaggregated memory.",
+      "tags": [
+        "memory-systems",
+        "cache-coherence",
+        "numa",
+        "cxl",
+        "disaggregated-memory"
+      ]
+    },
+    {
+      "id": "system/storage",
+      "name": "Storage Systems",
+      "description": "Filesystems, block I/O, caching, persistence and recovery.",
+      "tags": [
+        "storage",
+        "storage-systems",
+        "file-system",
+        "file-systems",
+        "filesystem",
+        "filesystems"
+      ]
+    },
+    {
+      "id": "system/distributed-system",
+      "name": "Distributed Systems",
+      "description": "Replication, consensus, coordination, consistency and fault tolerance.",
+      "tags": [
+        "distributed-systems",
+        "consensus",
+        "replication",
+        "raft",
+        "paxos"
+      ]
+    },
+    {
+      "id": "system/net",
+      "name": "Networking",
+      "description": "Network protocols, transport, congestion control and packet processing.",
+      "tags": [
+        "networking",
+        "network-systems",
+        "transport",
+        "congestion-control"
+      ]
+    },
+    {
+      "id": "system/database",
+      "name": "Database Systems",
+      "description": "Query processing, indexing, transactions and database architecture.",
+      "tags": [
+        "database",
+        "databases",
+        "database-systems",
+        "query-processing"
+      ]
+    },
+    {
+      "id": "system/virtualization",
+      "name": "Virtualization",
+      "description": "Virtual machines, hypervisors, containers and resource virtualization.",
+      "tags": [
+        "virtualization",
+        "hypervisor",
+        "virtual-machines"
+      ]
+    },
+    {
+      "id": "system/security",
+      "name": "Security",
+      "description": "Isolation, access control, trusted execution and systems security.",
+      "tags": [
+        "systems-security",
+        "trusted-execution",
+        "access-control"
+      ]
+    },
+    {
+      "id": "system/embedded",
+      "name": "Embedded Systems",
+      "description": "Embedded execution, real-time constraints and hardware-software integration.",
+      "tags": [
+        "embedded",
+        "embedded-systems",
+        "real-time-systems"
+      ]
+    },
+    {
+      "id": "system/mlsys",
+      "name": "Machine Learning Systems",
+      "description": "Training, inference, accelerators and data infrastructure for machine learning.",
+      "tags": [
+        "mlsys",
+        "ml-systems",
+        "machine-learning-systems",
+        "ai-infra"
+      ]
+    },
+    {
+      "id": "ai",
+      "name": "Artificial Intelligence",
+      "description": "Models, learning algorithms, reasoning and evaluation.",
+      "tags": [
+        "artificial-intelligence",
+        "deep-learning",
+        "reinforcement-learning",
+        "language-models"
+      ]
+    }
+  ]
+}
