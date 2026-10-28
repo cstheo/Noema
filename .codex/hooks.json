@@ -1,0 +1,55 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact|fork",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$(git rev-parse --show-toplevel)/tools/target/release/noema-hook\"",
+            "timeout": 3,
+            "additionalContextLimit": 4000,
+            "statusMessage": "Loading Noema context"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$(git rev-parse --show-toplevel)/tools/target/release/noema-hook\"",
+            "timeout": 3,
+            "additionalContextLimit": 4000,
+            "statusMessage": "Selecting Noema memory"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$(git rev-parse --show-toplevel)/tools/target/release/noema-hook\"",
+            "timeout": 3,
+            "statusMessage": "Reviewing Noema memory"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$(git rev-parse --show-toplevel)/tools/target/release/noema-hook\"",
+            "timeout": 3,
+            "statusMessage": "Deferring unfinished Noema reviews"
+          }
+        ]
+      }
+    ]
+  }
+}

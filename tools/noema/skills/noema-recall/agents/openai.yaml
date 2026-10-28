@@ -1,0 +1,4 @@
+interface:
+  display_name: "Noema Recall"
+  short_description: "Recall relevant memory and original local sources"
+  default_prompt: "Use $noema-recall to recover relevant Noema memory and Corpus evidence for this task."

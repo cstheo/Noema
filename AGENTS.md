@@ -6,7 +6,7 @@ An AI-native personal system for knowledge, memory, and action.
 
 - **Corpus (`corpus/`)** preserves sources and personal records.
 - **Tools (`tools/`)** provide shared capabilities for humans and agents.
-- **Noema (`noema/`)** is reserved for evidence-linked knowledge, memory, and insights.
+- **Noema (`noema/`)** holds evidence-linked knowledge, memory, and insights.
 
 Corpus and Noema supply task context. Agents invoke Tools, record outcomes in Corpus, and refine Noema. See [README.md](README.md) for the architecture.
 
@@ -22,5 +22,7 @@ Corpus and Noema supply task context. Agents invoke Tools, record outcomes in Co
 - Track time and uncertainty. File activity alone does not prove progress or mastery.
 - Propagate user corrections. Preserve history and mark superseded claims.
 - Select context for the task. Verify precise claims against original sources.
+- Proactively use [Noema Recall](tools/noema/skills/noema-recall/SKILL.md) when local context matters. Reuse checked context; refresh after task changes or context loss.
+- Use [Noema Consolidate](tools/noema/skills/noema-consolidate/SKILL.md) at milestones and session close. Respect its mode; save useful outcomes, corrections, insights, and continuation through `record` and `check`. Skip changes with no durable value.
 - Write system and agent content in English. Preserve source languages.
 - Keep private state and credentials out of tracked source.

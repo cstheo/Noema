@@ -5,17 +5,18 @@ CARGO_FLAGS ?= --locked
 ARGS ?= --help
 RUN = $(CARGO) run --quiet --release $(CARGO_FLAGS)
 
-.PHONY: help build check fmt clean mobile obsidian deploy
+.PHONY: help build check fmt clean mobile noema obsidian deploy
 
 help:
 	@printf '%s\n' \
 	  'Usage: make -C tools <target> [ARGS="..."]' \
 	  '' \
-	  '  build              Build both release binaries' \
+	  '  build              Build workspace release binaries' \
 	  '  check              Check formatting and run strict Clippy' \
 	  '  fmt                Format Rust' \
 	  '  clean              Remove Cargo build output' \
 	  '  mobile / obsidian  Run either CLI with ARGS (default: --help)' \
+	  '  noema              Retrieve, record, and check memory' \
 	  '  deploy             Deploy Obsidian, then install mobile (close Obsidian first)'
 
 build:
@@ -33,6 +34,9 @@ clean:
 
 mobile obsidian:
 	cd "$(TOOLS_DIR)" && $(RUN) -p Noema-$@ -- $(ARGS)
+
+noema:
+	cd "$(TOOLS_DIR)" && $(RUN) -p Noema-memory --bin noema -- $(ARGS)
 
 # Keep deployment ordered even when make is invoked with -j.
 deploy:

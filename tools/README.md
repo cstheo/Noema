@@ -5,6 +5,7 @@ Shared capabilities for humans and agents, built as a Rust workspace for macOS 1
 | Component | Purpose |
 | --- | --- |
 | [Mobile](mobile/README.md) | Daily tasks through Reminders; AI requests through Notes. |
+| [Memory](noema/README.md) | Retrieve context, record outcomes, and check evidence. |
 | [Obsidian](obsidian/README.md) | Dashboard, templates, and Zotero integration. |
 | [Configuration](config/README.md) | Shared settings and validation. |
 
@@ -16,6 +17,7 @@ Install Rust through rustup and Apple's Command Line Tools. From the repository 
 make -C tools build
 make -C tools check
 make -C tools mobile ARGS=status
+make -C tools noema ARGS=check
 make -C tools obsidian ARGS='deploy --check'
 make -C tools deploy
 ```

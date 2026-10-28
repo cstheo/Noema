@@ -13,6 +13,7 @@ Implementation context and source entry points, organized by project.
 | [Ark](Ark/README.md) | Agent harness and development workflow | [Source README](Ark/sources/README.md) |
 | [Dotfiles](dotfiles/README.md) | Personal development environment configuration | [Source README](dotfiles/sources/README.md) |
 | [kernel-dev](kernel-dev/README.md) | Linux kernel builds and storage experiments | [Source README](kernel-dev/sources/README.md) |
+| [Noema](Noema/README.md) | Personal knowledge, memory, and action | [System README](../../README.md) |
 | [RaftFS](RaftFS/README.md) | Raft replication and FUSE filesystem semantics | [Source README](RaftFS/sources/README.md) |
 | [StarryX](StarryX/README.md) | Component-oriented macrokernel and Linux ABI | [Source README](StarryX/sources/README.md) |
 | [Xark](xark/README.md) | OS composition and privilege boundaries | [Source README](xark/sources/README.md) |
