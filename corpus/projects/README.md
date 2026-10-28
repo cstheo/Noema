@@ -17,4 +17,4 @@ Implementation context and source entry points, organized by project.
 | [StarryX](StarryX/README.md) | Component-oriented macrokernel and Linux ABI | [Source README](StarryX/sources/README.md) |
 | [Xark](xark/README.md) | OS composition and privilege boundaries | [Source README](xark/sources/README.md) |
 | [XEMU](XEMU/README.md) | RISC-V emulation and system boot | [Source README](XEMU/sources/README.md) |
-| [XMFS](XMFS/README.md) | Shared-memory filesystem development | [Source reference](XMFS/sources/README.md) |
+| [XMFS](XMFS/README.md) | Cross-node shared-memory filesystem | [Source README](XMFS/sources/README.md) |

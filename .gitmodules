@@ -40,3 +40,6 @@
 [submodule "corpus/personal/dotfiles"]
 	path = corpus/projects/dotfiles/sources
 	url = https://github.com/cstheo/dotfiles.git
+[submodule "corpus/projects/XMFS/sources"]
+	path = corpus/projects/XMFS/sources
+	url = https://github.com/cstheo/XMFS.git
