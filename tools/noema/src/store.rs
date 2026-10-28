@@ -1,10 +1,11 @@
 use crate::model::{Fence, Page, parse_page};
 use anyhow::{Context, Result, bail, ensure};
+use serde::de::DeserializeOwned;
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
     io::{ErrorKind, Read},
-    path::{Component, Path, PathBuf},
+    path::{Path, PathBuf},
 };
 
 pub type Overlay = BTreeMap<String, String>;
@@ -21,11 +22,6 @@ pub fn safe_path(root: &Path, relative: &str) -> Result<PathBuf> {
         "unsafe repository path: {relative}"
     );
     let path = Path::new(relative);
-    ensure!(
-        path.components()
-            .all(|part| matches!(part, Component::Normal(_))),
-        "path must be repository-relative"
-    );
     let mut resolved = root.to_path_buf();
     for part in path.components() {
         resolved.push(part.as_os_str());
@@ -57,7 +53,6 @@ pub fn read_text(root: &Path, relative: &str, overlay: &Overlay) -> Result<Strin
         "not a regular file: {relative}"
     );
     let file = fs::File::open(&path).with_context(|| format!("read {relative}"))?;
-    ensure!(file.metadata()?.is_file(), "not a regular file: {relative}");
     let mut bytes = Vec::new();
     file.take((MAX_FILE_BYTES + 1) as u64)
         .read_to_end(&mut bytes)?;
@@ -66,6 +61,22 @@ pub fn read_text(root: &Path, relative: &str, overlay: &Overlay) -> Result<Strin
         "file exceeds 1 MiB: {relative}"
     );
     String::from_utf8(bytes).with_context(|| format!("file is not UTF-8: {relative}"))
+}
+
+pub fn read_json<T: DeserializeOwned>(root: &Path, relative: &str) -> Result<Option<T>> {
+    match read_text(root, relative, &Overlay::new()) {
+        Ok(text) => Ok(Some(
+            serde_json::from_str(&text).with_context(|| format!("Parse {relative}"))?,
+        )),
+        Err(error)
+            if error
+                .downcast_ref::<std::io::Error>()
+                .is_some_and(|error| error.kind() == ErrorKind::NotFound) =>
+        {
+            Ok(None)
+        }
+        Err(error) => Err(error),
+    }
 }
 
 fn components(path: &str) -> Option<Vec<&str>> {
@@ -133,10 +144,6 @@ fn collect(root: &Path, relative: &str, paths: &mut BTreeSet<String>) -> Result<
     if !directory.exists() {
         return Ok(());
     }
-    ensure!(
-        directory.is_dir(),
-        "memory area is not a directory: {relative}"
-    );
     for entry in fs::read_dir(directory)? {
         let entry = entry?;
         let name = entry
@@ -161,7 +168,6 @@ fn collect(root: &Path, relative: &str, paths: &mut BTreeSet<String>) -> Result<
                 "unexpected file in memory area: {child}"
             );
             paths.insert(child);
-            ensure!(paths.len() <= 4096, "memory page limit exceeded");
         } else {
             bail!("memory path is not a regular file: {child}");
         }

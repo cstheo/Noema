@@ -286,7 +286,7 @@ pub fn apply(root: &Path, request: &Request, dry_run: bool) -> Result<Output> {
                 overlay.insert(page.path.clone(), model::render_page(page)?);
             }
         }
-        let (_, report) = check::inspect(root, &overlay)?;
+        let report = check::inspect(root, &overlay)?.report;
         ensure!(
             report.errors.is_empty(),
             "Memory validation failed:\n{}",
@@ -326,7 +326,6 @@ pub fn apply(root: &Path, request: &Request, dry_run: bool) -> Result<Output> {
             .get(path)
             .context("Missing candidate content")?
             .clone();
-        store::writable_path(root, path)?;
         let before = originals.get(path).cloned();
         ensure!(
             current(root, path)? == before,
@@ -408,7 +407,6 @@ fn evidence(root: &Path, source: &Source, overlay: &Overlay) -> Result<Evidence>
     Ok(Evidence {
         path: source.path.clone(),
         anchor: source.anchor.clone(),
-        sha256: model::digest(body.as_bytes()),
     })
 }
 
@@ -458,7 +456,6 @@ fn publish(root: &Path, journal: &Journal) -> Result<()> {
     let pending = store::safe_path(root, PENDING)?;
     ensure!(!pending.exists(), "A record is already pending");
     for change in &journal.changes {
-        store::writable_path(root, &change.path)?;
         ensure!(
             current(root, &change.path)? == change.before,
             "File changed before publication: {}",
@@ -502,7 +499,6 @@ pub fn recover(root: &Path) -> Result<Output> {
             seen.insert(&change.path),
             "Duplicate path in pending record"
         );
-        store::writable_path(root, &change.path)?;
         let value = current(root, &change.path)?;
         ensure!(
             value == change.before || value.as_deref() == Some(change.after.as_str()),

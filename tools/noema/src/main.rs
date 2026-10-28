@@ -99,7 +99,7 @@ fn run(cli: Cli) -> Result<bool> {
     match cli.command {
         Command::Check { json } => {
             require_complete(&root)?;
-            let (pages, report) = check::inspect(&root, &Overlay::new())?;
+            let check::Inspection { pages, report, .. } = check::inspect(&root, &Overlay::new())?;
             if json {
                 println!("{}", serde_json::to_string_pretty(&report)?);
             } else {

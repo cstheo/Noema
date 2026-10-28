@@ -8,7 +8,7 @@ use crate::{
 use anyhow::{Context, Result, ensure};
 use clap::ValueEnum;
 use fs2::FileExt;
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use serde::{Deserialize, Serialize};
 use std::{
     fs::{self, File},
     io::Write,
@@ -22,7 +22,6 @@ use tempfile::NamedTempFile;
 const DIRECTORY: &str = ".local/noema/consolidation";
 const REQUESTS: &str = ".local/noema/consolidation/requests";
 const SETTINGS: &str = ".local/noema/consolidation/settings.json";
-const MAX_STATE: u64 = 8192;
 const MAX_REVIEWS: usize = 4096;
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq, ValueEnum)]
@@ -116,7 +115,8 @@ pub fn set_mode(root: &Path, mode: Mode) -> Result<()> {
 
 pub fn complete(root: &Path, token: &str, outcome: Outcome) -> Result<()> {
     let path = review_path(token)?;
-    let mut review: Review = read(root, &path)?.context("Unknown consolidation token")?;
+    let mut review: Review =
+        store::read_json(root, &path)?.context("Unknown consolidation token")?;
     validate(&review, token)?;
     if let Some(previous) = review.outcome {
         ensure!(
@@ -127,7 +127,7 @@ pub fn complete(root: &Path, token: &str, outcome: Outcome) -> Result<()> {
     }
     if outcome == Outcome::Saved {
         require_complete(root)?;
-        let (_, report) = check::inspect(root, &Overlay::new())?;
+        let report = check::inspect(root, &Overlay::new())?.report;
         ensure!(
             report.is_clean(),
             "Memory check failed; consolidation review remains pending"
@@ -152,7 +152,7 @@ pub fn register(
     valid_transcript(transcript)?;
     let token = token(session, turn);
     let path = review_path(&token)?;
-    if let Some(review) = read::<Review>(root, &path)? {
+    if let Some(review) = store::read_json::<Review>(root, &path)? {
         validate(&review, &token)?;
         return Ok(review.outcome.is_none().then_some(token));
     }
@@ -189,7 +189,7 @@ pub fn request_stop(root: &Path, session: &str, turn: &str) -> Result<Option<Str
     valid_identifier(turn)?;
     let token = token(session, turn);
     let path = review_path(&token)?;
-    let Some(mut review) = read::<Review>(root, &path)? else {
+    let Some(mut review) = store::read_json::<Review>(root, &path)? else {
         return Ok(None);
     };
     validate(&review, &token)?;
@@ -273,7 +273,9 @@ pub fn valid_identifier(value: &str) -> Result<()> {
 }
 
 fn mode(root: &Path) -> Result<Mode> {
-    Ok(read::<Settings>(root, SETTINGS)?.unwrap_or_default().mode)
+    Ok(store::read_json::<Settings>(root, SETTINGS)?
+        .unwrap_or_default()
+        .mode)
 }
 
 fn token(session: &str, turn: &str) -> String {
@@ -295,18 +297,8 @@ fn review_path(token: &str) -> Result<String> {
 fn validate(review: &Review, token: &str) -> Result<()> {
     ensure!(
         review.token == token
-            && valid_hash(&review.session)
-            && valid_hash(&review.turn)
             && digest(format!("{}:{}", review.session, review.turn).as_bytes()) == token,
         "Invalid consolidation request"
-    );
-    valid_transcript(review.transcript_path.as_deref())?;
-    ensure!(
-        review
-            .work
-            .as_ref()
-            .is_none_or(|work| crate::model::valid_id(work)),
-        "Invalid consolidation work id"
     );
     Ok(())
 }
@@ -322,31 +314,11 @@ fn valid_transcript(path: Option<&Path>) -> Result<()> {
     Ok(())
 }
 
-fn read<T: DeserializeOwned>(root: &Path, relative: &str) -> Result<Option<T>> {
-    let path = store::safe_path(root, relative)?;
-    if !path.exists() {
-        return Ok(None);
-    }
-    let metadata = fs::symlink_metadata(&path)?;
-    ensure!(
-        metadata.is_file() && metadata.len() <= MAX_STATE,
-        "Invalid or oversized consolidation metadata"
-    );
-    let text = store::read_text(root, relative, &Overlay::new())?;
-    Ok(Some(
-        serde_json::from_str(&text).context("Parse consolidation metadata")?,
-    ))
-}
-
 fn request_paths(root: &Path) -> Result<Vec<(String, String)>> {
     let directory = store::safe_path(root, REQUESTS)?;
     if !directory.exists() {
         return Ok(Vec::new());
     }
-    ensure!(
-        directory.is_dir(),
-        "Consolidation request area is not a directory"
-    );
     let mut paths = Vec::new();
     for entry in fs::read_dir(directory)? {
         let entry = entry?;
@@ -376,8 +348,8 @@ fn reviews(root: &Path) -> Result<Vec<Review>> {
     request_paths(root)?
         .into_iter()
         .map(|(token, path)| {
-            let review =
-                read::<Review>(root, &path)?.context("Consolidation request disappeared")?;
+            let review = store::read_json::<Review>(root, &path)?
+                .context("Consolidation request disappeared")?;
             validate(&review, &token)?;
             Ok(review)
         })
@@ -391,13 +363,12 @@ fn write(root: &Path, relative: &str, value: &impl Serialize) -> Result<()> {
         .context("Consolidation metadata has no parent")?;
     let bytes = serde_json::to_vec(value)?;
     ensure!(
-        bytes.len() < MAX_STATE as usize,
+        bytes.len() < store::MAX_FILE_BYTES,
         "Consolidation metadata exceeds its budget"
     );
     fs::create_dir_all(parent)?;
     store::safe_path(root, relative)?;
     let staging = store::safe_path(root, DIRECTORY)?;
-    fs::set_permissions(&staging, fs::Permissions::from_mode(0o700))?;
     fs::set_permissions(parent, fs::Permissions::from_mode(0o700))?;
     // A killed hook may leave its staging file; keep it outside the request index.
     let mut file = NamedTempFile::new_in(staging)?;

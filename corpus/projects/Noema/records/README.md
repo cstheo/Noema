@@ -10,5 +10,7 @@ Immutable user decisions, execution evidence, and continuation checkpoints for N
 - [Recall and consolidation lifecycle](2026-10-28-consolidation-lifecycle.md)
 - [Review cleanup](2026-10-28-review-cleanup.md)
 - [Backbone versioning](2026-10-28-backbone-versioning.md)
+- [Validation boundaries](2026-10-28-validation-boundaries.md)
+- [Linked evidence](2026-10-29-linked-evidence.md)
 
 [Noema project](../README.md)

@@ -481,7 +481,7 @@ fn concurrent_updates_do_not_lose_the_winning_revision() -> Result<()> {
 }
 
 #[test]
-fn changed_or_missing_evidence_never_enters_context_as_current_fact() -> Result<()> {
+fn source_text_changes_require_explicit_corrections_but_links_must_resolve() -> Result<()> {
     let fixture = Fixture::new()?;
     fixture.seed()?;
     fs::write(
@@ -489,13 +489,20 @@ fn changed_or_missing_evidence_never_enters_context_as_current_fact() -> Result<
         "# Changed evidence\n\n## Request\nOther text.\n\n## Handoff\nOther next action.\n",
     )?;
     let before = snapshot(fixture.root())?;
-    let check = fixture.run(&["check", "--json"])?;
-    assert!(!check.status.success());
-    let context = fixture.run(&["context", "--work", "work.test", "--json"])?;
-    let rendered = String::from_utf8_lossy(&context.stdout);
-    for invalid in [OLD, DEPENDENT, TRANSITIVE, "Next: implement the reader."] {
-        assert!(!rendered.contains(invalid));
-    }
+    assert!(fixture.run(&["check", "--json"])?.status.success());
+    let context = fixture.context()?;
+    assert!(
+        context["text"]
+            .as_str()
+            .context("context text")?
+            .contains(OLD)
+    );
+    assert!(
+        context["text"]
+            .as_str()
+            .context("context text")?
+            .contains("Other next action.")
+    );
     assert_eq!(before, snapshot(fixture.root())?);
 
     fs::remove_file(fixture.root().join(SOURCE))?;

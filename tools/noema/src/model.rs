@@ -27,7 +27,6 @@ pub struct Evidence {
     pub path: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub anchor: Option<String>,
-    pub sha256: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -234,9 +233,8 @@ pub fn render_page(page: &Page) -> Result<String> {
         ));
         for evidence in &entry.evidence {
             result.push_str(&format!(
-                "- Evidence: {}\n- Snapshot: sha256:{}\n",
-                relative_link(&page.path, evidence)?,
-                evidence.sha256
+                "- Evidence: {}\n",
+                relative_link(&page.path, evidence)?
             ));
         }
         for (label, values) in [
@@ -258,7 +256,6 @@ pub fn render_page(page: &Page) -> Result<String> {
 }
 
 pub fn parse_page(path: &str, text: &str) -> Result<Page> {
-    ensure!(text.len() <= 1024 * 1024, "memory page exceeds 1 MiB");
     let text = text
         .strip_prefix("---\n")
         .context("missing YAML frontmatter")?;
@@ -296,24 +293,8 @@ pub fn parse_page(path: &str, text: &str) -> Result<Page> {
                 .context("invalid entry metadata")?;
             match key {
                 "Evidence" => {
-                    ensure!(
-                        evidence.last().is_none_or(|item| !item.sha256.is_empty()),
-                        "missing evidence snapshot"
-                    );
                     let (path, anchor) = parse_link(path, value)?;
-                    evidence.push(Evidence {
-                        path,
-                        anchor,
-                        sha256: String::new(),
-                    });
-                }
-                "Snapshot" => {
-                    let item = evidence.last_mut().context("snapshot has no evidence")?;
-                    ensure!(item.sha256.is_empty(), "duplicate evidence snapshot");
-                    item.sha256 = value
-                        .strip_prefix("sha256:")
-                        .context("snapshot must use sha256")?
-                        .to_owned();
+                    evidence.push(Evidence { path, anchor });
                 }
                 "Basis" | "Status" | "As of" | "Depends on" | "Supersedes" | "Review after" => {
                     ensure!(
@@ -366,10 +347,6 @@ pub fn parse_page(path: &str, text: &str) -> Result<Page> {
             review_after: fields.get("Review after").map(|date| (*date).to_owned()),
         };
         validate_statement(&entry.text)?;
-        ensure!(
-            entry.evidence.iter().all(|item| !item.sha256.is_empty()),
-            "missing evidence snapshot"
-        );
         entries.push(entry);
     }
     Ok(Page {
@@ -385,7 +362,7 @@ mod tests {
 
     #[test]
     fn markdown_roundtrip_preserves_fences_and_source_paths() -> Result<()> {
-        let page = Page {
+        let mut page = Page {
             path: "noema/work/example.md".into(),
             meta: Meta {
                 id: "work.example".into(),
@@ -404,14 +381,15 @@ mod tests {
                 evidence: vec![Evidence {
                     path: "corpus/records/source (one).md".into(),
                     anchor: Some("request".into()),
-                    sha256: digest(b"source"),
                 }],
                 depends_on: vec![],
                 supersedes: vec![],
                 review_after: None,
             }],
         };
+        page.meta.resume = Some(page.entries[0].evidence[0].clone());
         let rendered = render_page(&page)?;
+        assert!(!rendered.contains("Snapshot") && !rendered.contains("sha256:"));
         assert_eq!(parse_page(&page.path, &rendered)?, page);
         let mut indented = page.clone();
         indented.entries[0].text =

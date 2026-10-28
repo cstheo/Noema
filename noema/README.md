@@ -19,18 +19,19 @@ Each `## entry-id` contains one independently revisable statement:
 - Status: active
 - As of: YYYY-MM-DD
 - Evidence: [source](<relative/path/to/record.md#request>)
-- Snapshot: sha256:<digest>
 
 One supported statement.
 ```
 
-Repeat Evidence/Snapshot pairs for multiple sources. Optional fields are `Depends on`, `Supersedes`, and `Review after`; references use `page.id#entry-id`. Reserve `##` for entries.
+Repeat Evidence links for multiple sources. Optional fields are `Depends on`, `Supersedes`, and `Review after`; references use `page.id#entry-id`. Reserve `##` for entries.
 
 - Basis: `explicit` user statement, `observed` result, or `inferred` conclusion with dependencies.
 - Status: `active`, `review`, `superseded`, or `retracted`.
 - `As of` dates the claim; `updated` dates the edit. Review deadlines use UTC dates.
 
-Evidence stores a repository-relative path, optional anchor, and SHA256. Binary sources need a text evidence record. Corrections preserve history and suspend dependent claims. Source drift suspends affected claims until reviewed. Validation checks consistency, not truth or mastery.
+Evidence stores a repository-relative path and optional anchor. Git tracks revisions; source edits alone do not change claim status. Binary sources need a text evidence record. Corrections preserve history and suspend dependent claims. Validation checks links and consistency, not truth or mastery.
+
+A handoff requires valid active premises. Context reuses checked source text.
 
 ## Lifecycle
 

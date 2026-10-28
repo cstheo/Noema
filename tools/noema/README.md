@@ -17,6 +17,8 @@ From the repository root, run `make -C tools noema ARGS='<command>'`. After buil
 
 `context --max-chars N` keeps complete blocks within a Unicode character budget. `--cwd PATH` supplies a scope hint. No match returns an explanation; ambiguous work needs an explicit ID.
 
+Each inspection reads a source once. Context and Hook selection reuse that text. A later request reads sources again.
+
 ## Change sets
 
 Use a new immutable Corpus record for each update. Replace this example's evidence and dates:
@@ -46,11 +48,11 @@ Use a new immutable Corpus record for each update. Replace this example's eviden
 }
 ```
 
-Existing pages require `expected`, the SHA256 of their current bytes (`shasum -a 256 PAGE`). Updates append entries; existing IDs cannot be rewritten. The tool fills evidence hashes. Optional entry fields are `depends_on`, `supersedes`, and `review_after`; top-level `retracts` withdraws entry references. See the [page format](../../noema/README.md#pages).
+Existing pages require `expected`, the SHA256 of their current bytes (`shasum -a 256 PAGE`). This is a write precondition, not stored page metadata. Updates append entries; existing IDs cannot be rewritten. Evidence keeps paths and anchors; Git tracks revisions. Optional entry fields are `depends_on`, `supersedes`, and `review_after`; top-level `retracts` withdraws entry references. See the [page format](../../noema/README.md#pages).
 
 New entries are active. Corrections suspend dependent memories. Entry changes clear affected handoffs unless refreshed. A refreshed `resume` must point to the new record. Existing handoffs can be refreshed with `entries: []`; new pages need a supported entry. Identical replay is a no-op; different content at an existing record path fails.
 
-Requests, pages, UTF-8 sources, and recovery journals are bounded to 1 MiB each. Writes reject symlinks, `sources/`, and nested Git checkouts. Git commits are separate.
+Requests, pages, UTF-8 sources, private JSON, and recovery journals share a 1 MiB limit. Writes reject symlinks, `sources/`, and nested Git checkouts. Git commits are separate.
 
 ## Recovery
 

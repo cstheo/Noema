@@ -158,7 +158,13 @@ fn binding_cache_contains_only_work_ids_with_private_permissions() -> Result<()>
     let file = files[0].path();
     let binding: Value = serde_json::from_slice(&fs::read(&file)?)?;
     assert_eq!(binding, json!({"work":"work.alpha"}));
-    assert_eq!(fs::metadata(file)?.permissions().mode() & 0o777, 0o600);
+    assert_eq!(fs::metadata(&file)?.permissions().mode() & 0o777, 0o600);
+    fs::write(&file, r#"{"work":"../obsolete-cache-id"}"#)?;
+    let refreshed = hook(
+        root.path(),
+        prompt(root.path(), "../../escaped-session", "Alpha"),
+    )?;
+    assert!(refreshed.contains("Alpha uses"));
     Ok(())
 }
 
@@ -482,7 +488,7 @@ fn consolidation_state_refuses_symlinks_and_oversized_settings() -> Result<()> {
     fs::create_dir_all(root.path().join(".local/noema/consolidation"))?;
     fs::write(
         root.path().join(".local/noema/consolidation/settings.json"),
-        vec![b' '; 8193],
+        format!("{}{{\"mode\":\"auto\"}}", " ".repeat(1024 * 1024)),
     )?;
     assert!(
         !run(

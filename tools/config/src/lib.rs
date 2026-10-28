@@ -132,13 +132,9 @@ fn relative(value: &str) -> Result<()> {
         !value.is_empty()
             && !value.contains('\\')
             && !value.chars().any(char::is_control)
-            && !Path::new(value).is_absolute()
             && value
                 .split('/')
-                .all(|part| !matches!(part, "" | "." | ".."))
-            && Path::new(value)
-                .components()
-                .all(|part| matches!(part, Component::Normal(_))),
+                .all(|part| !matches!(part, "" | "." | "..")),
         "Expected a repository-relative path without traversal: {value:?}"
     );
     Ok(())
@@ -276,4 +272,26 @@ pub fn get() -> &'static Config {
 
 pub fn timezone() -> Tz {
     get().timezone
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn configured_record_paths_stay_inside_the_vault() -> Result<()> {
+        let mut config: Config = toml::from_str(include_str!("../../config.toml"))?;
+        config.validate()?;
+        for path in [
+            "/corpus/daily",
+            "corpus/../outside",
+            "corpus//daily",
+            "corpus/./daily",
+            "corpus\\daily",
+        ] {
+            config.journal.folder = path.into();
+            assert!(config.validate().is_err(), "{path}");
+        }
+        Ok(())
+    }
 }

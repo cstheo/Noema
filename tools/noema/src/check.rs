@@ -1,5 +1,5 @@
 use crate::{
-    model::{Basis, Entry, Evidence, Page, Status, digest, entry_ref, valid_date, valid_id},
+    model::{Basis, Entry, Evidence, Page, Status, entry_ref, valid_date, valid_id},
     store::{Overlay, has_anchor, load_pages, read_text, safe_path},
 };
 use anyhow::Result;
@@ -15,6 +15,14 @@ pub struct Report {
     pub warnings: Vec<String>,
     pub invalid: BTreeSet<String>,
 }
+
+pub struct Inspection {
+    pub pages: Vec<Page>,
+    pub report: Report,
+    pub(crate) sources: Sources,
+}
+
+type Sources = BTreeMap<String, std::result::Result<String, String>>;
 
 impl Report {
     pub fn is_clean(&self) -> bool {
@@ -40,32 +48,24 @@ fn evidence(
     overlay: &Overlay,
     reference: &str,
     report: &mut Report,
+    sources: &mut Sources,
 ) {
     if !source.path.starts_with("corpus/") {
         report.error(reference, "evidence must be under corpus/");
         return;
     }
-    if source.sha256.len() != 64
-        || !source
-            .sha256
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-    {
-        report.error(reference, "invalid SHA256 snapshot");
-        return;
-    }
-    match read_text(root, &source.path, overlay) {
+    let cached = sources.entry(source.path.clone()).or_insert_with(|| {
+        read_text(root, &source.path, overlay).map_err(|error| format!("{error:#}"))
+    });
+    match cached {
         Ok(text) => {
             if let Some(anchor) = &source.anchor
-                && !has_anchor(&text, anchor)
+                && !has_anchor(text, anchor)
             {
                 report.error(
                     reference,
                     format!("missing source anchor {}#{anchor}", source.path),
                 );
-            }
-            if digest(text.as_bytes()) != source.sha256 {
-                report.warning(reference, format!("source changed; review {}", source.path));
             }
         }
         Err(error) => report.error(
@@ -75,7 +75,14 @@ fn evidence(
     }
 }
 
-fn validate_entry(root: &Path, page: &Page, entry: &Entry, overlay: &Overlay, report: &mut Report) {
+fn validate_entry(
+    root: &Path,
+    page: &Page,
+    entry: &Entry,
+    overlay: &Overlay,
+    report: &mut Report,
+    sources: &mut Sources,
+) {
     let reference = entry_ref(page, entry);
     if !valid_id(&entry.id) {
         report.error(&reference, "invalid entry ID");
@@ -105,7 +112,7 @@ fn validate_entry(root: &Path, page: &Page, entry: &Entry, overlay: &Overlay, re
         report.error(&reference, "inferred memory requires depends_on");
     }
     for source in &entry.evidence {
-        evidence(root, source, overlay, &reference, report);
+        evidence(root, source, overlay, &reference, report, sources);
     }
     for (label, references) in [
         ("depends_on", &entry.depends_on),
@@ -166,9 +173,10 @@ fn detect_cycles(graph: &BTreeMap<String, Vec<String>>, label: &str, report: &mu
     }
 }
 
-pub fn inspect(root: &Path, overlay: &Overlay) -> Result<(Vec<Page>, Report)> {
+pub fn inspect(root: &Path, overlay: &Overlay) -> Result<Inspection> {
     let pages = load_pages(root, overlay)?;
     let mut report = Report::default();
+    let mut sources = BTreeMap::new();
     let mut page_ids = BTreeSet::new();
     let mut entries = BTreeMap::<String, (&Page, &Entry)>::new();
     for page in &pages {
@@ -210,14 +218,14 @@ pub fn inspect(root: &Path, overlay: &Overlay) -> Result<(Vec<Page>, Report)> {
             {
                 report.error(id, "resume requires an exact source anchor");
             }
-            evidence(root, resume, overlay, id, &mut report);
+            evidence(root, resume, overlay, id, &mut report, &mut sources);
         }
         for entry in &page.entries {
             let reference = entry_ref(page, entry);
             if entries.insert(reference.clone(), (page, entry)).is_some() {
                 report.error(&reference, "duplicate entry ID");
             }
-            validate_entry(root, page, entry, overlay, &mut report);
+            validate_entry(root, page, entry, overlay, &mut report, &mut sources);
         }
     }
     let mut dependencies = BTreeMap::new();
@@ -290,14 +298,17 @@ pub fn inspect(root: &Path, overlay: &Overlay) -> Result<(Vec<Page>, Report)> {
             break;
         }
     }
-    Ok((pages, report))
+    Ok(Inspection {
+        pages,
+        report,
+        sources,
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::model::{Meta, render_page};
-    use anyhow::Context;
     use std::fs;
 
     fn fixture() -> Result<(tempfile::TempDir, Page)> {
@@ -325,7 +336,6 @@ mod tests {
                 evidence: vec![Evidence {
                     path: "corpus/records/source.md".into(),
                     anchor: Some("request".into()),
-                    sha256: digest(source.as_bytes()),
                 }],
                 depends_on: vec![],
                 supersedes: vec![],
@@ -336,26 +346,48 @@ mod tests {
     }
 
     #[test]
-    fn changed_evidence_invalidates_dependents_without_rehashing() -> Result<()> {
-        let (directory, mut page) = fixture()?;
-        let mut derived = page.entries[0].clone();
-        derived.id = "derived".into();
-        derived.basis = Basis::Inferred;
-        derived.depends_on = vec!["work.example#concise".into()];
-        page.entries.push(derived);
+    fn sources_are_checked_by_path_and_anchor() -> Result<()> {
+        let (directory, page) = fixture()?;
         fs::write(directory.path().join(&page.path), render_page(&page)?)?;
-        assert!(inspect(directory.path(), &Overlay::new())?.1.is_clean());
         fs::write(
             directory.path().join("corpus/records/source.md"),
-            "# Record\n\n## Request\nChanged.\n",
+            "# Record\n\n## Request\nRevised source text.\n",
         )?;
-        let (_, report) = inspect(directory.path(), &Overlay::new())?;
-        assert!(report.invalid.contains("work.example#concise"));
-        assert!(report.invalid.contains("work.example#derived"));
-        assert_eq!(
-            page.entries[0].evidence[0].sha256,
-            digest(b"# Record\n\n## Request\nKeep concise notes.\n")
+        assert!(
+            inspect(directory.path(), &Overlay::new())?
+                .report
+                .is_clean()
         );
+        fs::remove_file(directory.path().join("corpus/records/source.md"))?;
+        let report = inspect(directory.path(), &Overlay::new())?.report;
+        assert!(report.invalid.contains("work.example#concise"));
+        Ok(())
+    }
+
+    #[test]
+    fn context_uses_checked_bytes_until_the_next_inspection() -> Result<()> {
+        let (directory, mut page) = fixture()?;
+        page.meta.resume = Some(page.entries[0].evidence[0].clone());
+        fs::write(directory.path().join(&page.path), render_page(&page)?)?;
+        let checked = inspect(directory.path(), &Overlay::new())?;
+        let options = crate::context::Options {
+            work: Some(page.meta.id.clone()),
+            query: String::new(),
+            cwd: None,
+            max_chars: 12000,
+            bootstrap: false,
+        };
+        fs::write(
+            directory.path().join("corpus/records/source.md"),
+            "# Record\n\n## Request\nChanged after inspection.\n",
+        )?;
+        let cached = crate::context::assemble(directory.path(), &checked, &options)?;
+        assert!(cached.text.contains("Keep concise notes."));
+        assert!(cached.text.contains("corpus/records/source.md#request"));
+        assert!(!cached.text.contains("sha256:"));
+        let refreshed = crate::context::context(directory.path(), &options)?;
+        assert_eq!(refreshed.selected, cached.selected);
+        assert!(refreshed.text.contains("Changed after inspection."));
         Ok(())
     }
 
@@ -365,30 +397,24 @@ mod tests {
         page.entries[0].as_of = "2020-01-01".into();
         page.entries[0].review_after = Some("2020-02-01".into());
         let overlay = Overlay::from([(page.path.clone(), render_page(&page)?)]);
-        let (_, report) = inspect(directory.path(), &overlay)?;
+        let report = inspect(directory.path(), &overlay)?.report;
         assert!(report.errors.is_empty());
         assert!(report.invalid.contains("work.example#concise"));
         page.entries[0].status = Status::Review;
         let overlay = Overlay::from([(page.path.clone(), render_page(&page)?)]);
-        assert!(inspect(directory.path(), &overlay)?.1.is_clean());
+        assert!(inspect(directory.path(), &overlay)?.report.is_clean());
         Ok(())
     }
 
     #[test]
-    fn stale_handoff_invalidates_page_and_its_derived_users() -> Result<()> {
+    fn resume_requires_an_exact_source_anchor() -> Result<()> {
         let (directory, mut page) = fixture()?;
         page.meta.resume = Some(Evidence {
             path: "corpus/records/source.md".into(),
-            anchor: Some("request".into()),
-            sha256: digest(b"old record bytes"),
+            anchor: None,
         });
         let overlay = Overlay::from([(page.path.clone(), render_page(&page)?)]);
-        let (_, report) = inspect(directory.path(), &overlay)?;
-        assert!(report.invalid.contains("work.example"));
-        assert!(report.invalid.contains("work.example#concise"));
-        page.meta.resume.as_mut().context("resume")?.anchor = None;
-        let overlay = Overlay::from([(page.path.clone(), render_page(&page)?)]);
-        let (_, report) = inspect(directory.path(), &overlay)?;
+        let report = inspect(directory.path(), &overlay)?.report;
         assert!(
             report
                 .errors
@@ -410,7 +436,7 @@ mod tests {
         second.id = "replacement-two".into();
         page.entries.extend([first, second]);
         let overlay = Overlay::from([(page.path.clone(), render_page(&page)?)]);
-        let (_, report) = inspect(directory.path(), &overlay)?;
+        let report = inspect(directory.path(), &overlay)?.report;
         assert!(report.invalid.contains("work.example#replacement-one"));
         assert!(report.invalid.contains("work.example#replacement-two"));
         assert!(
@@ -429,7 +455,7 @@ mod tests {
         page.entries[0].depends_on = vec!["work.example#concise".into()];
         page.entries[0].evidence[0].anchor = Some("missing".into());
         let overlay = Overlay::from([(page.path.clone(), render_page(&page)?)]);
-        let (_, report) = inspect(directory.path(), &overlay)?;
+        let report = inspect(directory.path(), &overlay)?.report;
         assert!(
             report
                 .errors

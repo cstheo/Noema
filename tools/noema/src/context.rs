@@ -1,7 +1,7 @@
 use crate::{
     check,
-    model::{Basis, Entry, Page, Status, digest, entry_ref},
-    store::{Overlay, anchor_text, read_text},
+    model::{Basis, Entry, Page, Status, entry_ref},
+    store::{Overlay, anchor_text},
 };
 use anyhow::{Result, ensure};
 use serde::Serialize;
@@ -34,20 +34,29 @@ struct Candidate<'a> {
 
 /// Select current memory without changing files or treating file activity as work state.
 pub fn context(root: &Path, options: &Options) -> Result<Output> {
+    assemble(root, &check::inspect(root, &Overlay::new())?, options)
+}
+
+pub(crate) fn assemble(
+    root: &Path,
+    checked: &check::Inspection,
+    options: &Options,
+) -> Result<Output> {
     ensure!(options.max_chars > 0, "max-chars must be positive");
     ensure!(
         !options.bootstrap || (options.work.is_none() && options.query.trim().is_empty()),
         "bootstrap cannot be combined with a query or explicit work"
     );
-    let (pages, report) = check::inspect(root, &Overlay::new())?;
+    let pages = &checked.pages;
+    let report = &checked.report;
     ensure!(
         report.errors.is_empty(),
         "memory validation failed: {}",
         report.errors.join("; ")
     );
-    let mut warnings = report.warnings;
-    let eligible = eligible_entries(&pages, &report.invalid);
-    let candidates = select_pages(root, &pages, &eligible, options, &mut warnings)?;
+    let mut warnings = report.warnings.clone();
+    let eligible = eligible_entries(pages, &report.invalid);
+    let candidates = select_pages(root, pages, &eligible, options, &mut warnings)?;
     let mut output = Output {
         text: String::new(),
         selected: Vec::new(),
@@ -79,18 +88,19 @@ pub fn context(root: &Path, options: &Options) -> Result<Output> {
             && checkpoint_current
             && let Some(resume) = &page.meta.resume
         {
-            let record = read_text(root, &resume.path, &Overlay::new())?;
+            // Reuse the bytes already checked, including across Hook budget retries.
+            let record = &checked.sources[&resume.path]
+                .as_ref()
+                .expect("valid checkpoint has a readable source");
             // Keep a whole checkpoint section. Never substitute the entire source record.
-            if digest(record.as_bytes()) == resume.sha256
-                && let Some(anchor) = &resume.anchor
-                && let Some(handoff) = anchor_text(&record, anchor)
+            if let Some(anchor) = &resume.anchor
+                && let Some(handoff) = anchor_text(record, anchor)
             {
                 let block = format!(
-                    "## {} — recorded checkpoint\nSource: {}#{}\nSnapshot: sha256:{}\n\n{}\n\n",
+                    "## {} — recorded checkpoint\nSource: {}#{}\n\n{}\n\n",
                     page.meta.id,
                     resume.path,
                     anchor,
-                    resume.sha256,
                     handoff.trim()
                 );
                 if budget.push(&block) {
@@ -195,6 +205,16 @@ fn select_pages<'a>(
         .transpose()?;
     let query = options.query.to_lowercase();
     let terms = terms(&query);
+    let mut aliases = BTreeMap::<String, usize>::new();
+    for page in pages {
+        for alias in std::iter::once(&page.meta.id)
+            .chain(&page.meta.aliases)
+            .map(|name| name.to_lowercase())
+            .collect::<BTreeSet<_>>()
+        {
+            *aliases.entry(alias).or_default() += 1;
+        }
+    }
     let mut candidates = Vec::new();
     for page in pages {
         if explicit.is_some_and(|selected| selected.meta.id == page.meta.id) {
@@ -210,21 +230,7 @@ fn select_pages<'a>(
         }
         let matched_alias = std::iter::once(&page.meta.id)
             .chain(page.meta.aliases.iter())
-            .find(|alias| {
-                contains_phrase(&query, alias)
-                    && pages
-                        .iter()
-                        .filter(|other| {
-                            other.meta.id.eq_ignore_ascii_case(alias)
-                                || other
-                                    .meta
-                                    .aliases
-                                    .iter()
-                                    .any(|name| name.to_lowercase() == alias.to_lowercase())
-                        })
-                        .count()
-                        == 1
-            });
+            .find(|alias| contains_phrase(&query, alias) && aliases[&alias.to_lowercase()] == 1);
         if let Some(alias) = matched_alias {
             candidates.push(Candidate {
                 page,
@@ -329,9 +335,6 @@ fn terms(text: &str) -> BTreeSet<String> {
 
 fn contains_phrase(query: &str, phrase: &str) -> bool {
     let phrase = phrase.to_lowercase();
-    if phrase.trim().is_empty() {
-        return false;
-    }
     query.match_indices(&phrase).any(|(position, _)| {
         !phrase.is_ascii()
             || (!query[..position]
@@ -359,14 +362,13 @@ fn entry_block(page: &Page, entry: &Entry) -> String {
     );
     for evidence in &entry.evidence {
         block.push_str(&format!(
-            "- {}{} (sha256:{})\n",
+            "- {}{}\n",
             evidence.path,
             evidence
                 .anchor
                 .as_ref()
                 .map(|anchor| format!("#{anchor}"))
-                .unwrap_or_default(),
-            evidence.sha256
+                .unwrap_or_default()
         ));
     }
     if !entry.depends_on.is_empty() {
@@ -512,7 +514,6 @@ mod tests {
         let evidence = Evidence {
             path: source.into(),
             anchor: Some("request".into()),
-            sha256: digest(record.as_bytes()),
         };
         let mut page = work("work.test", "Test");
         page.meta.resume = Some(Evidence {
