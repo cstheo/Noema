@@ -12,5 +12,7 @@ Immutable user decisions, execution evidence, and continuation checkpoints for N
 - [Backbone versioning](2026-10-28-backbone-versioning.md)
 - [Validation boundaries](2026-10-28-validation-boundaries.md)
 - [Linked evidence](2026-10-29-linked-evidence.md)
+- [Local workspace](2026-10-29-workspace.md)
+- [Simple state](2026-10-29-simple-state.md)
 
 [Noema project](../README.md)

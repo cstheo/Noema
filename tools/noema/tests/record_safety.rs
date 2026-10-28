@@ -1,6 +1,5 @@
 use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 use std::{
     fs,
     path::Path,
@@ -16,13 +15,7 @@ fn command(root: &Path, args: &[&str]) -> Result<Output> {
         .output()?)
 }
 
-fn request(
-    root: &Path,
-    input: &Path,
-    id: &str,
-    text: &str,
-    expected: Option<String>,
-) -> Result<Value> {
+fn request(root: &Path, input: &Path, id: &str, text: &str) -> Result<Value> {
     let source = format!("corpus/records/{id}.md");
     let value = json!({
         "id": id,
@@ -31,7 +24,6 @@ fn request(
         "body": "# Source\n\n## Request\nPreserve the original statement.\n",
         "pages": [{
             "path": "noema/work/example.md",
-            "expected": expected,
             "id": "work.example",
             "summary": "Example memory.",
             "entries": [{
@@ -60,7 +52,7 @@ fn oversized_journal_is_rejected_before_publication() -> Result<()> {
     let root = vault()?;
     let inputs = tempfile::tempdir()?;
     let seed = inputs.path().join("seed.json");
-    request(root.path(), &seed, "seed", &"x".repeat(600_000), None)?;
+    request(root.path(), &seed, "seed", &"x".repeat(600_000))?;
     let first = command(
         root.path(),
         &["record", seed.to_str().context("input path")?],
@@ -74,13 +66,7 @@ fn oversized_journal_is_rejected_before_publication() -> Result<()> {
     let before = fs::read(&page)?;
     let old_source = fs::read(root.path().join("corpus/records/seed.md"))?;
     let update = inputs.path().join("update.json");
-    request(
-        root.path(),
-        &update,
-        "update",
-        "One additional statement.",
-        Some(format!("{:x}", Sha256::digest(&before))),
-    )?;
+    request(root.path(), &update, "update", "One additional statement.")?;
     let result = command(
         root.path(),
         &["record", update.to_str().context("input path")?],
@@ -112,13 +98,7 @@ fn canonical_statement_whitespace_is_idempotent() -> Result<()> {
     let root = vault()?;
     let inputs = tempfile::tempdir()?;
     let input = inputs.path().join("seed.json");
-    request(
-        root.path(),
-        &input,
-        "seed",
-        "  Keep concise notes.\n\n",
-        None,
-    )?;
+    request(root.path(), &input, "seed", "  Keep concise notes.\n\n")?;
     let args = ["record", input.to_str().context("input path")?, "--json"];
     let first = command(root.path(), &args)?;
     assert!(

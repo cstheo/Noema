@@ -20,14 +20,6 @@ fn shortened(value: impl AsRef<str>) -> String {
     value.as_ref().chars().take(1000).collect()
 }
 
-fn receipt(body: &str) -> String {
-    util::digest(
-        notes::plain(body)
-            .split_whitespace()
-            .collect::<Vec<_>>()
-            .join(" "),
-    )
-}
 struct Running {
     note_id: String,
     version: String,
@@ -69,7 +61,7 @@ impl Bridge {
 
     fn finish(&self, row: &state::Request, transcript: &str) -> Result<()> {
         self.db.execute(
-            "UPDATE requests SET status=?,request='',answer=NULL,delivery_hash=NULL,checkpoint=?,updated=? WHERE note_id=? AND version=?",
+            "UPDATE requests SET status=?,request='',answer=NULL,delivery=NULL,checkpoint=?,updated=? WHERE note_id=? AND version=?",
             params![
                 if row.error.is_some() {
                     "failed"
@@ -98,21 +90,13 @@ impl Bridge {
             let request = notes::plain(body);
             let mut row = state::request(&self.db, id)?;
             if let Some(previous) = &row
-                && let Some(hash) = &previous.delivery_hash
-                && let Some(answer) = &previous.answer
+                && let Some(transcript) = &previous.delivery
+                && state::Checkpoint::new(transcript)
+                    .followup(&request)
+                    .is_some()
             {
-                let delivered =
-                    notes::with_answer(&notes::html_note("", &previous.request), answer);
-                let transcript = notes::plain(&delivered);
-                if hash == &receipt(&delivered)
-                    && state::Checkpoint::new(&transcript)
-                        .followup(&request)
-                        .is_some()
-                {
-                    // Recover an uncertain write even if a follow-up has already arrived.
-                    self.finish(previous, &transcript)?;
-                    row = state::request(&self.db, id)?;
-                }
+                self.finish(previous, transcript)?;
+                row = state::request(&self.db, id)?;
             }
             // Upgrade existing single-answer notes without replaying their old question.
             if let Some(row) = &row
@@ -123,7 +107,7 @@ impl Bridge {
                 continue;
             }
             if row.as_ref().is_some_and(|row| {
-                matches!(row.status.as_str(), "answered" | "failed") && row.delivery_hash.is_some()
+                matches!(row.status.as_str(), "answered" | "failed") && row.delivery.is_some()
             }) {
                 continue;
             }
@@ -131,7 +115,11 @@ impl Bridge {
                 Some(checkpoint) => checkpoint.followup(&request),
                 None => Some(request.clone()),
             };
-            let version = util::digest(&request);
+            let version = row
+                .as_ref()
+                .filter(|row| row.request == request)
+                .map(|row| row.version.clone())
+                .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
             if latest.as_deref().is_none_or(|text| text.trim().is_empty()) {
                 if let Some(row) = &row
                     && !matches!(row.status.as_str(), "answered" | "failed")
@@ -140,7 +128,7 @@ impl Bridge {
                     if self.running.as_ref().is_some_and(|run| run.note_id == id) {
                         agent::cancel_running();
                     }
-                    self.db.execute("UPDATE requests SET status='answered',request='',answer=NULL,delivery_hash=NULL,error=NULL,updated=? WHERE note_id=?",params![util::now(),id])?;
+                    self.db.execute("UPDATE requests SET status='answered',request='',answer=NULL,delivery=NULL,error=NULL,updated=? WHERE note_id=?",params![util::now(),id])?;
                 }
                 continue;
             }
@@ -148,7 +136,7 @@ impl Bridge {
                 row.version != version || matches!(row.status.as_str(), "answered" | "failed")
             }) {
                 // An uncertain write may have succeeded. Preserve subsequent edits rather than append twice.
-                if row.as_ref().is_some_and(|row| row.delivery_hash.is_some()) {
+                if row.as_ref().is_some_and(|row| row.delivery.is_some()) {
                     self.db.execute("UPDATE requests SET status='failed',error='The note changed during answer delivery; its contents were preserved.',updated=? WHERE note_id=?", params![util::now(),id])?;
                     continue;
                 }
@@ -162,8 +150,8 @@ impl Bridge {
                 let answer = row.answer.as_deref().context("Missing answer")?;
                 let delivered = notes::with_answer(body, answer);
                 self.db.execute(
-                    "UPDATE requests SET delivery_hash=? WHERE note_id=?",
-                    params![receipt(&delivered), id],
+                    "UPDATE requests SET delivery=? WHERE note_id=?",
+                    params![notes::plain(&delivered), id],
                 )?;
                 match notes::call(
                     "answer",
@@ -174,7 +162,7 @@ impl Bridge {
                     Err(error) => {
                         if error.to_string().contains("Notes CONFLICT") {
                             self.db.execute(
-                                "UPDATE requests SET delivery_hash=NULL WHERE note_id=?",
+                                "UPDATE requests SET delivery=NULL WHERE note_id=?",
                                 [id],
                             )?;
                         }
@@ -479,18 +467,18 @@ mod tests {
     }
 
     #[test]
-    fn conversation_continues_without_storing_duplicate_history() -> Result<()> {
+    fn conversation_continues_from_its_answered_prefix() -> Result<()> {
         let (_root, bridge) = fixture()?;
         state::observe(&bridge.db, "note", "question", "version")?;
         bridge.db.execute(
-            "UPDATE requests SET status='ready',answer='answer',delivery_hash='receipt'",
+            "UPDATE requests SET status='ready',answer='answer',delivery='receipt'",
             [],
         )?;
         let row = state::request(&bridge.db, "note")?.context("request")?;
         bridge.finish(&row, "question\nNoema\nanswer")?;
         let row = state::request(&bridge.db, "note")?.context("request")?;
         assert_eq!(row.status, "answered");
-        assert!(row.request.is_empty() && row.answer.is_none() && row.delivery_hash.is_none());
+        assert!(row.request.is_empty() && row.answer.is_none() && row.delivery.is_none());
         let checkpoint = row.checkpoint.context("answered checkpoint")?;
         assert_eq!(
             checkpoint.followup("question\nNoema\nanswer"),

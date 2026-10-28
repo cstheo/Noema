@@ -35,7 +35,7 @@ function installShared(plugin) {
   let discoveryVersion = null;
   let paperFields = Object.create(null);
   let catalog = null;
-  const metadataHashes = new Map();
+  const metadataWrites = new Map();
   const autoSyncJobs = new Map();
   const noteDeletions = new Map();
 
@@ -115,11 +115,11 @@ function installShared(plugin) {
   function identity() {
     plugin.ensureActive();
     const serverId = plugin.snapshot?.serverId;
-    if (!serverId) throw new Error("Open Zotero and refresh My Library first.");
+    if (typeof serverId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(serverId)) throw new Error("Open Zotero and refresh My Library first.");
     return serverId;
   }
   function partition() {
-    return path.join(plugin.storageReal, "shared", crypto.createHash("sha256").update(identity()).digest("hex").slice(0, 24));
+    return path.join(plugin.storageReal, "shared", identity());
   }
   async function loadFields() {
     const target = path.join(base, layout.catalog);
@@ -202,8 +202,20 @@ function installShared(plugin) {
     const folder = partition();
     const promise = (async () => {
       let saved;
-      try { if (await registryStorage(folder)) saved = JSON.parse(await fs.readFile(path.join(folder, "notes.json"), "utf8")); }
-      catch (error) { if (error.code !== "ENOENT") throw error; }
+      try {
+        if (!await registryStorage(folder)) {
+          const shared = path.dirname(folder);
+          const candidates = await fs.readdir(shared, { withFileTypes: true }).catch(error => { if (error.code === "ENOENT") return []; throw error; });
+          for (const candidate of candidates.filter(candidate => candidate.isDirectory())) {
+            const previous = path.join(shared, candidate.name), file = path.join(previous, "notes.json");
+            let registry;
+            try { await guardPrivateFile(file); registry = JSON.parse(await fs.readFile(file, "utf8")); }
+            catch (error) { if (error.code === "ENOENT" || error instanceof SyntaxError) continue; throw error; }
+            if (registry.serverId === serverId) { await fs.rename(previous, folder); break; }
+          }
+        }
+        if (await registryStorage(folder)) saved = JSON.parse(await fs.readFile(path.join(folder, "notes.json"), "utf8"));
+      } catch (error) { if (error.code !== "ENOENT") throw error; }
       plugin.ensureActive();
       if (generation !== registryGeneration || plugin.snapshot?.serverId !== serverId) throw new Error("The Zotero database changed while loading shared notes.");
       if (saved?.schema === 1 && saved.serverId === serverId && Array.isArray(saved.entries)) {
@@ -243,7 +255,7 @@ function installShared(plugin) {
         const backup = path.join(folder, "property-migrations", `${parsed.fileId}.md`);
         await guardPrivateFile(backup);
         const original = helpers.parseMarkdown(await fs.readFile(backup, "utf8"), entry);
-        if (original.version !== entry.version || helpers.contentHash(original.body) !== entry.base?.localHash) throw new Error("The migrated note's ownership could not be verified. Your files were kept.");
+        if (original.version !== entry.version || original.body !== entry.base?.localBody) throw new Error("The migrated note's ownership could not be verified. Your files were kept.");
         if ([...plugin.mirrors.values()].some(value => value !== entry && value.fileId === parsed.fileId)) throw new Error("Duplicate migrated shared-note identity. Your files were kept.");
         entry.fileId = parsed.fileId; repaired = true;
       }
@@ -378,7 +390,7 @@ function installShared(plugin) {
     plugin.ensureActive();
     if (record.serverId !== identity()) throw new Error("The Zotero database changed. Your Markdown file was kept.");
     if (source !== fresh) {
-      if (metadataOnly) metadataHashes.set(entry.path, helpers.contentHash(source));
+      if (metadataOnly) metadataWrites.set(entry.path, source);
       await plugin.app.vault.modify(local.file, source);
     }
     return true;
@@ -528,7 +540,7 @@ function installShared(plugin) {
     await guardLocalFile(entry, local.file);
     if (entry.serverId !== identity()) throw new Error("The Zotero database changed. Your file was kept.");
     await plugin.app.vault.trash(local.file, false);
-    metadataHashes.delete(entry.path);
+    metadataWrites.delete(entry.path);
     window.clearTimeout(entry.timer); delete entry.timer;
     if (plugin.noteTargets?.get(entry.parentKey) === entry.path) plugin.noteTargets.delete(entry.parentKey);
   }
@@ -681,7 +693,7 @@ function installShared(plugin) {
           delete entry.pendingMove; await persist(); throw error;
         }
       }
-      plugin.mirrors.delete(from); metadataHashes.delete(from);
+      plugin.mirrors.delete(from); metadataWrites.delete(from);
       entry.path = target; delete entry.pendingMove; plugin.mirrors.set(target, entry);
       if (plugin.noteTargets?.get(entry.parentKey) === from) plugin.noteTargets.set(entry.parentKey, target);
       await persist();
@@ -955,13 +967,13 @@ function installShared(plugin) {
     const schedule = () => {
       scheduleAutoSync(entry);
     };
-    if (metadataHashes.has(file.path)) {
-      const expectedHash = metadataHashes.get(file.path);
+    if (metadataWrites.has(file.path)) {
+      const expectedSource = metadataWrites.get(file.path);
       // Vault watchers may report our write after modify() resolves. Compare
       // the saved source so bibliographic edits cannot trigger body writeback.
       plugin.app.vault.read(file).then(source => {
-        if (metadataHashes.get(file.path) !== expectedHash || helpers.contentHash(source) === expectedHash) return;
-        metadataHashes.delete(file.path);
+        if (metadataWrites.get(file.path) !== expectedSource || source === expectedSource) return;
+        metadataWrites.delete(file.path);
         schedule();
       }).catch(() => {});
     } else schedule();

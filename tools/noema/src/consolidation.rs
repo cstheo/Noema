@@ -1,8 +1,6 @@
 //! Private lifecycle review requests; semantic consolidation remains an Agent task.
 use crate::{
-    check,
-    model::digest,
-    require_complete,
+    check, require_complete,
     store::{self, Overlay},
 };
 use anyhow::{Context, Result, ensure};
@@ -18,9 +16,10 @@ use std::{
     time::{Duration, Instant},
 };
 use tempfile::NamedTempFile;
+use uuid::Uuid;
 
 const DIRECTORY: &str = ".local/noema/consolidation";
-const REQUESTS: &str = ".local/noema/consolidation/requests";
+const REQUESTS: &str = ".local/noema/consolidation/requests.json";
 const SETTINGS: &str = ".local/noema/consolidation/settings.json";
 const MAX_REVIEWS: usize = 4096;
 
@@ -114,10 +113,11 @@ pub fn set_mode(root: &Path, mode: Mode) -> Result<()> {
 }
 
 pub fn complete(root: &Path, token: &str, outcome: Outcome) -> Result<()> {
-    let path = review_path(token)?;
-    let mut review: Review =
-        store::read_json(root, &path)?.context("Unknown consolidation token")?;
-    validate(&review, token)?;
+    let mut pending = reviews(root)?;
+    let review = pending
+        .iter_mut()
+        .find(|review| review.token == token)
+        .context("Unknown consolidation token")?;
     if let Some(previous) = review.outcome {
         ensure!(
             previous == outcome,
@@ -134,7 +134,7 @@ pub fn complete(root: &Path, token: &str, outcome: Outcome) -> Result<()> {
         );
     }
     review.outcome = Some(outcome);
-    write(root, &path, &review)
+    write(root, REQUESTS, &pending)
 }
 
 pub fn register(
@@ -150,35 +150,33 @@ pub fn register(
     let Some(turn) = turn else { return Ok(None) };
     valid_identifier(turn)?;
     valid_transcript(transcript)?;
-    let token = token(session, turn);
-    let path = review_path(&token)?;
-    if let Some(review) = store::read_json::<Review>(root, &path)? {
-        validate(&review, &token)?;
-        return Ok(review.outcome.is_none().then_some(token));
+    let mut pending = reviews(root)?;
+    if let Some(review) = pending
+        .iter()
+        .find(|review| review.session == session && review.turn == turn)
+    {
+        return Ok(review.outcome.is_none().then(|| review.token.clone()));
     }
-    if request_paths(root)?.len() >= MAX_REVIEWS {
-        for previous in reviews(root)?
-            .into_iter()
-            .filter(|review| review.outcome.is_some())
-        {
-            fs::remove_file(store::safe_path(root, &review_path(&previous.token)?)?)?;
-        }
+    if pending.len() >= MAX_REVIEWS {
+        pending.retain(|review| review.outcome.is_none());
         ensure!(
-            request_paths(root)?.len() < MAX_REVIEWS,
+            pending.len() < MAX_REVIEWS,
             "Consolidation request limit reached; review pending sessions first"
         );
     }
+    let token = Uuid::new_v4().to_string();
     let review = Review {
         token: token.clone(),
-        session: digest(session.as_bytes()),
-        turn: digest(turn.as_bytes()),
+        session: session.into(),
+        turn: turn.into(),
         transcript_path: transcript.map(Path::to_owned),
         work: work.map(str::to_owned),
         requested: false,
         deferred: false,
         outcome: None,
     };
-    write(root, &path, &review)?;
+    pending.push(review);
+    write(root, REQUESTS, &pending)?;
     Ok(Some(token))
 }
 
@@ -187,17 +185,19 @@ pub fn request_stop(root: &Path, session: &str, turn: &str) -> Result<Option<Str
         return Ok(None);
     }
     valid_identifier(turn)?;
-    let token = token(session, turn);
-    let path = review_path(&token)?;
-    let Some(mut review) = store::read_json::<Review>(root, &path)? else {
+    let mut pending = reviews(root)?;
+    let Some(review) = pending
+        .iter_mut()
+        .find(|review| review.session == session && review.turn == turn)
+    else {
         return Ok(None);
     };
-    validate(&review, &token)?;
     if review.outcome.is_some() || review.requested {
         return Ok(None);
     }
     review.requested = true;
-    write(root, &path, &review)?;
+    let token = review.token.clone();
+    write(root, REQUESTS, &pending)?;
     Ok(Some(format!(
         "Use $noema-consolidate for one bounded review, not a restart of this task. Acknowledge token {token} with `noema consolidation --complete {token} --outcome saved` after record/check, or `--outcome skipped` if nothing useful changed. Leave failed or unsupported saves pending."
     )))
@@ -208,22 +208,21 @@ pub fn defer(root: &Path, session: &str, transcript: Option<&Path>) -> Result<()
         return Ok(());
     }
     valid_transcript(transcript)?;
-    let session = digest(session.as_bytes());
-    for mut review in reviews(root)?
-        .into_iter()
+    let mut pending = reviews(root)?;
+    if !pending.iter().any(|review| review.session == session) {
+        return Ok(());
+    }
+    pending.retain(|review| review.session != session || review.outcome.is_none());
+    for review in pending
+        .iter_mut()
         .filter(|review| review.session == session)
     {
-        let path = review_path(&review.token)?;
-        if review.outcome.is_some() {
-            fs::remove_file(store::safe_path(root, &path)?)?;
-        } else {
-            review.deferred = true;
-            if let Some(transcript) = transcript {
-                review.transcript_path = Some(transcript.to_owned());
-            }
-            write(root, &path, &review)?;
+        review.deferred = true;
+        if let Some(transcript) = transcript {
+            review.transcript_path = Some(transcript.to_owned());
         }
     }
+    write(root, REQUESTS, &pending)?;
     Ok(())
 }
 
@@ -231,7 +230,6 @@ pub fn startup_notice(root: &Path, session: &str, source: Option<&str>) -> Resul
     if mode(root)? == Mode::Manual {
         return Ok(String::new());
     }
-    let session = digest(session.as_bytes());
     let deferred: Vec<_> = reviews(root)?
         .into_iter()
         .filter(|review| {
@@ -278,31 +276,6 @@ fn mode(root: &Path) -> Result<Mode> {
         .mode)
 }
 
-fn token(session: &str, turn: &str) -> String {
-    digest(format!("{}:{}", digest(session.as_bytes()), digest(turn.as_bytes())).as_bytes())
-}
-
-fn valid_hash(value: &str) -> bool {
-    value.len() == 64
-        && value
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-}
-
-fn review_path(token: &str) -> Result<String> {
-    ensure!(valid_hash(token), "Invalid consolidation token");
-    Ok(format!("{REQUESTS}/{token}.json"))
-}
-
-fn validate(review: &Review, token: &str) -> Result<()> {
-    ensure!(
-        review.token == token
-            && digest(format!("{}:{}", review.session, review.turn).as_bytes()) == token,
-        "Invalid consolidation request"
-    );
-    Ok(())
-}
-
 fn valid_transcript(path: Option<&Path>) -> Result<()> {
     if let Some(path) = path {
         let text = path.to_str().context("Transcript path must be UTF-8")?;
@@ -314,46 +287,8 @@ fn valid_transcript(path: Option<&Path>) -> Result<()> {
     Ok(())
 }
 
-fn request_paths(root: &Path) -> Result<Vec<(String, String)>> {
-    let directory = store::safe_path(root, REQUESTS)?;
-    if !directory.exists() {
-        return Ok(Vec::new());
-    }
-    let mut paths = Vec::new();
-    for entry in fs::read_dir(directory)? {
-        let entry = entry?;
-        ensure!(
-            entry.file_type()?.is_file(),
-            "Consolidation request is not a regular file"
-        );
-        let name = entry
-            .file_name()
-            .into_string()
-            .map_err(|_| anyhow::anyhow!("Invalid consolidation filename"))?;
-        let token = name
-            .strip_suffix(".json")
-            .context("Invalid consolidation filename")?;
-        review_path(token)?;
-        paths.push((token.to_owned(), format!("{REQUESTS}/{name}")));
-        ensure!(
-            paths.len() <= MAX_REVIEWS,
-            "Consolidation request limit exceeded"
-        );
-    }
-    paths.sort();
-    Ok(paths)
-}
-
 fn reviews(root: &Path) -> Result<Vec<Review>> {
-    request_paths(root)?
-        .into_iter()
-        .map(|(token, path)| {
-            let review = store::read_json::<Review>(root, &path)?
-                .context("Consolidation request disappeared")?;
-            validate(&review, &token)?;
-            Ok(review)
-        })
-        .collect()
+    Ok(store::read_json(root, REQUESTS)?.unwrap_or_default())
 }
 
 fn write(root: &Path, relative: &str, value: &impl Serialize) -> Result<()> {

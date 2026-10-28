@@ -1,7 +1,6 @@
 ---
 record_id: 2026-10-28-skill-memory-retrieval
 date: 2026-10-28
-request_sha256: c5ad38a6c2f44b78c04ad2087f281a350a856640805811d833f91b6a2e87fee0
 entries:
 - work.noema#skill-assisted-retrieval
 - work.noema#retrieval-reference-review
@@ -28,7 +27,7 @@ These are agent-authored findings from primary documentation and source inspecti
   - https://github.com/letta-ai/letta-code/blob/5dea67021b99810707ff753db35e4534f70ff1fd/src/tools/impl/memory.ts
   - https://github.com/letta-ai/letta-code/blob/5dea67021b99810707ff753db35e4534f70ff1fd/src/skills/builtin/maintaining-deferred-memory/SKILL.md
   - https://github.com/letta-ai/letta-code/blob/5dea67021b99810707ff753db35e4534f70ff1fd/src/agent/prompts/recall_subagent.md
-- Hermes: the current session-search tool offers lexical discovery, anchored message windows, full-session reads, and browsing. Its inspected file explicitly performs no internal LLM calls; the caller model drives the loop. The inspected session-search blob SHA is `4cd76bae45c9b2f122eacb4c7cddef3e6bcf7526` (a file blob, not a commit). Procedures belong in skills; stable cross-task facts belong in lightweight memory.
+- Hermes: the current session-search tool offers lexical discovery, anchored message windows, full-session reads, and browsing. Its inspected file explicitly performs no internal LLM calls; the caller model drives the loop. Procedures belong in skills; stable cross-task facts belong in lightweight memory.
   - https://github.com/NousResearch/hermes-agent/blob/main/tools/session_search_tool.py
   - https://github.com/NousResearch/hermes-agent/blob/main/agent/prompt_builder.py
   - https://github.com/NousResearch/hermes-agent/blob/main/skills/research/llm-wiki/SKILL.md

@@ -16,7 +16,6 @@ check(() => assert.equal(parsed.fileId, id.fileId));
 check(() => assert.equal(parsed.legacy, false));
 check(() => assert.equal(notes.parseMarkdown(original.replace(/\n/g, "\r\n"), id).body, parsed.body));
 check(() => assert.equal(notes.parseMarkdown(`\uFEFF${original}`, id).body, parsed.body));
-check(() => assert.equal(notes.contentHash("a\r\nb"), notes.contentHash("a\nb")));
 check(() => assert(!/^zotero-[A-Za-z0-9_-]+:/m.test(original)));
 check(() => assert(!/^aliases:/m.test(original)));
 check(() => assert.equal(notes.parseMarkdown(notes.makeMarkdown({ ...id, serverId: "local-library_1" }), { ...id, serverId: "local-library_1" }).serverId, "local-library_1"));
@@ -53,7 +52,6 @@ const marker = `<!-- noema-shared-note:${id.fileId} -->`;
 const otherFileId = "dd7d9948-44f7-40e7-bb8f-1d9aa34df011";
 check(() => assert.equal(original.split(marker).length - 1, 1));
 check(() => assert(!parsed.body.includes("noema-shared-note:")));
-check(() => assert.equal(notes.contentHash(parsed.body), notes.contentHash("# Notes\n\nA thought.\n")));
 check(() => assert.equal(notes.parseMarkdown(original).serverId, undefined));
 check(() => assert.equal(notes.parseMarkdown(original).fileId, id.fileId));
 check(() => assert.throws(() => notes.parseMarkdown(original.replace(`${marker}\n\n`, ""), id), /marker|identity/));
@@ -125,7 +123,7 @@ check(() => assert.equal(notes.noteFilename(longTitle, 2), `${longTitle.slice(0,
 for (const index of [0, -1, 1.5, 10001, "../bad", id.key, NaN, Infinity]) {
   check(() => assert.throws(() => notes.noteFilename("Title", index), /index/));
 }
-check(() => assert.throws(() => notes.contentHash("x".repeat(2 * 1024 * 1024 + 1)), /limit/));
+
 
 const remote = { ...id, html: '<div data-schema-version="9"><p>A thought.</p></div>' };
 const base = notes.createBaseline({ ...id, localBody: parsed.body, remoteHTML: remote.html });
@@ -141,7 +139,7 @@ check(() => assert.equal(decide({ ...parsed, version: 14 }).action, "conflict"))
 check(() => assert.equal(decide(null).action, "pull"));
 check(() => assert.equal(decide(parsed, null).action, "conflict"));
 check(() => assert.equal(decide(parsed, remote, null).action, "conflict"));
-check(() => assert.equal(decide(parsed, remote, { ...base, remoteHash: "tampered" }).action, "conflict"));
+check(() => assert.equal(decide(parsed, remote, { ...base, remoteHTML: null }).action, "conflict"));
 check(() => assert.equal(decide(parsed, remote, { ...base, canPush: undefined }).action, "conflict"));
 check(() => assert.equal(decide(parsed, { ...remote, serverId: "OtherServer1" }).action, "conflict"));
 check(() => assert.equal(decide(parsed, { ...remote, parentKey: "OTHERKEY" }).action, "conflict"));

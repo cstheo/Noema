@@ -384,7 +384,6 @@ mod tests {
         let cached = crate::context::assemble(directory.path(), &checked, &options)?;
         assert!(cached.text.contains("Keep concise notes."));
         assert!(cached.text.contains("corpus/records/source.md#request"));
-        assert!(!cached.text.contains("sha256:"));
         let refreshed = crate::context::context(directory.path(), &options)?;
         assert_eq!(refreshed.selected, cached.selected);
         assert!(refreshed.text.contains("Changed after inspection."));

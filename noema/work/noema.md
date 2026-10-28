@@ -10,7 +10,7 @@ scope:
 - noema
 - tools/noema
 resume:
-  path: corpus/projects/Noema/records/2026-10-29-linked-evidence.md
+  path: corpus/projects/Noema/records/2026-10-29-simple-state.md
   anchor: handoff
 ---
 
@@ -96,3 +96,12 @@ The two project skills, lifecycle controls, and four-event hook definition are i
 - Evidence: [source](<../../corpus/projects/Noema/records/2026-10-28-backbone-versioning.md#request>)
 
 Commit the Noema backbone with its durable memory pages and Corpus evidence; exclude course content and independent project records.
+
+## unified-workspace
+
+- Basis: explicit
+- Status: active
+- As of: 2026-10-29
+- Evidence: [source](<../../corpus/projects/Noema/records/2026-10-29-workspace.md#request>)
+
+Keep development and artifact-reproduction chats rooted in Noema so project and research records and memory accumulate across work; use independent project contexts when separate memory is needed.

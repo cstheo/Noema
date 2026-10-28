@@ -12,6 +12,8 @@ An AI-native personal system for knowledge, memory, and action.
 
 Agents [recall](tools/noema/skills/noema-recall/SKILL.md) task context and [consolidate](tools/noema/skills/noema-consolidate/SKILL.md) durable outcomes through `context`, `record`, and `check`.
 
+Use [Workspace](workspace/README.md) for local development and artifact reproduction.
+
 Initialize source checkouts with `git submodule update --init`; initialize nested submodules when needed.
 
 ```mermaid

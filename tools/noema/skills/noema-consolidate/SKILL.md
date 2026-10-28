@@ -29,7 +29,7 @@ Refresh an existing handoff without adding a claim when only continuation change
 
 ## Publish and acknowledge
 
-Follow the [record protocol](../../README.md#change-sets): read current pages for expected hashes, run `record INPUT.json --dry-run`, publish, then `check`. Reconcile conflicts instead of overwriting concurrent edits.
+Follow the [record protocol](../../README.md#change-sets): read current pages, run `record INPUT.json --dry-run`, publish, then `check`. Reconcile conflicts instead of overwriting concurrent edits.
 
 Acknowledge the exact review token with `consolidation --complete TOKEN --outcome saved` after a checked save, or `--outcome skipped` when nothing useful changed. Skipping creates no Corpus record. Failed or unsupported saves remain pending.
 

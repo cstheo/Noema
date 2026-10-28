@@ -31,7 +31,6 @@ pub struct Request {
 #[serde(deny_unknown_fields)]
 pub struct Update {
     pub path: String,
-    pub expected: Option<String>,
     pub id: String,
     pub summary: String,
     pub aliases: Option<Vec<String>>,
@@ -75,7 +74,6 @@ pub struct Output {
 struct Header {
     record_id: String,
     date: String,
-    request_sha256: String,
     entries: Vec<String>,
     retracts: Vec<String>,
 }
@@ -84,7 +82,6 @@ struct Header {
 #[serde(deny_unknown_fields)]
 struct Journal {
     id: String,
-    request_sha256: String,
     changes: Vec<Change>,
 }
 
@@ -114,11 +111,9 @@ pub fn apply(root: &Path, request: &Request, dry_run: bool) -> Result<Output> {
         !request.pages.is_empty() || !request.retracts.is_empty(),
         "Change set has no memory updates"
     );
-    let request_sha256 = model::digest(&serde_json::to_vec(request)?);
     let header = Header {
         record_id: request.id.clone(),
         date: request.date.clone(),
-        request_sha256: request_sha256.clone(),
         entries: request
             .pages
             .iter()
@@ -175,14 +170,6 @@ pub fn apply(root: &Path, request: &Request, dry_run: bool) -> Result<Output> {
         let index = pages.iter().position(|page| page.path == update.path);
         let mut page = match index {
             Some(index) => {
-                let original = originals
-                    .get(&update.path)
-                    .context("Missing original page snapshot")?;
-                ensure!(
-                    update.expected.as_deref() == Some(model::digest(original.as_bytes()).as_str()),
-                    "Page changed or expected hash missing: {}",
-                    update.path
-                );
                 ensure!(
                     pages[index].meta.id == update.id,
                     "A page's stable id cannot change"
@@ -190,10 +177,7 @@ pub fn apply(root: &Path, request: &Request, dry_run: bool) -> Result<Output> {
                 pages[index].clone()
             }
             None => {
-                ensure!(
-                    !file.exists() && update.expected.is_none(),
-                    "New page must not have an expected hash"
-                );
+                ensure!(!file.exists(), "New page already exists");
                 Page {
                     path: update.path.clone(),
                     meta: Meta {
@@ -349,7 +333,6 @@ pub fn apply(root: &Path, request: &Request, dry_run: bool) -> Result<Output> {
             root,
             &Journal {
                 id: request.id.clone(),
-                request_sha256,
                 changes,
             },
         )?;

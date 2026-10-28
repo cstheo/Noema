@@ -152,14 +152,11 @@ fn binding_cache_contains_only_work_ids_with_private_permissions() -> Result<()>
         root.path(),
         prompt(root.path(), "../../escaped-session", "Alpha"),
     )?;
-    let folder = root.path().join(".local/noema/sessions");
-    let files = fs::read_dir(folder)?.collect::<std::io::Result<Vec<_>>>()?;
-    assert_eq!(files.len(), 1);
-    let file = files[0].path();
+    let file = root.path().join(".local/noema/sessions.json");
     let binding: Value = serde_json::from_slice(&fs::read(&file)?)?;
-    assert_eq!(binding, json!({"work":"work.alpha"}));
+    assert_eq!(binding, json!({"../../escaped-session":"work.alpha"}));
     assert_eq!(fs::metadata(&file)?.permissions().mode() & 0o777, 0o600);
-    fs::write(&file, r#"{"work":"../obsolete-cache-id"}"#)?;
+    fs::write(&file, r#"{"../../escaped-session":"../obsolete-cache-id"}"#)?;
     let refreshed = hook(
         root.path(),
         prompt(root.path(), "../../escaped-session", "Alpha"),
@@ -174,7 +171,10 @@ fn adapter_refuses_symlinked_private_state_without_external_writes() -> Result<(
     let root = fixture()?;
     let outside = tempfile::tempdir()?;
     fs::create_dir_all(root.path().join(".local/noema"))?;
-    symlink(outside.path(), root.path().join(".local/noema/sessions"))?;
+    symlink(
+        outside.path(),
+        root.path().join(".local/noema/sessions.json"),
+    )?;
     let output = run(
         root.path(),
         &serde_json::to_vec(&prompt(root.path(), "one", "Alpha"))?,
@@ -425,11 +425,9 @@ fn lifecycle_metadata_never_publishes_memory_or_caches_conversation_text() -> Re
     control(root.path(), &["--complete", &token, "--outcome", "skipped"])?;
     assert_eq!(fs::read(page)?, before_page);
     assert_eq!(fs::read(record)?, before_record);
-    for file in fs::read_dir(root.path().join(".local/noema/consolidation/requests"))? {
-        let path = file?.path();
-        assert!(!fs::read_to_string(&path)?.contains(secret));
-        assert_eq!(fs::metadata(path)?.permissions().mode() & 0o777, 0o600);
-    }
+    let path = root.path().join(".local/noema/consolidation/requests.json");
+    assert!(!fs::read_to_string(&path)?.contains(secret));
+    assert_eq!(fs::metadata(path)?.permissions().mode() & 0o777, 0o600);
     Ok(())
 }
 
@@ -577,7 +575,6 @@ fn read_only_consolidation_status_creates_no_private_state() -> Result<()> {
 
 #[test]
 fn capacity_reclaims_completed_receipts_without_discarding_in_flight_reviews() -> Result<()> {
-    use noema_memory::model::digest;
     for preserve_pending in [false, true] {
         let root = fixture()?;
         if preserve_pending {
@@ -586,18 +583,17 @@ fn capacity_reclaims_completed_receipts_without_discarding_in_flight_reviews() -
                 review_prompt(root.path(), "active", "first", "Alpha"),
             )?;
         }
-        let directory = root.path().join(".local/noema/consolidation/requests");
-        fs::create_dir_all(&directory)?;
-        let session = digest(b"completed-session");
+        let file = root.path().join(".local/noema/consolidation/requests.json");
+        fs::create_dir_all(file.parent().context("review directory")?)?;
+        let mut reviews: Vec<Value> = if file.exists() {
+            serde_json::from_slice(&fs::read(&file)?)?
+        } else {
+            vec![]
+        };
         for index in 0..(4096 - usize::from(preserve_pending)) {
-            let turn = digest(index.to_string().as_bytes());
-            let token = digest(format!("{session}:{turn}").as_bytes());
-            let review = json!({"token":token,"session":session,"turn":turn,"transcript_path":null,"work":null,"requested":true,"deferred":false,"outcome":"skipped"});
-            fs::write(
-                directory.join(format!("{token}.json")),
-                serde_json::to_vec(&review)?,
-            )?;
+            reviews.push(json!({"token":uuid::Uuid::new_v4().to_string(),"session":"completed-session","turn":index.to_string(),"transcript_path":null,"work":null,"requested":true,"deferred":false,"outcome":"skipped"}));
         }
+        fs::write(&file, serde_json::to_vec(&reviews)?)?;
         assert_eq!(pending_count(root.path())?, usize::from(preserve_pending));
         hook_json(
             root.path(),
@@ -608,7 +604,7 @@ fn capacity_reclaims_completed_receipts_without_discarding_in_flight_reviews() -
             1 + usize::from(preserve_pending)
         );
         assert_eq!(
-            fs::read_dir(directory)?.count(),
+            serde_json::from_slice::<Vec<Value>>(&fs::read(file)?)?.len(),
             1 + usize::from(preserve_pending)
         );
     }
@@ -704,7 +700,7 @@ fn interrupted_staging_files_do_not_poison_requests_but_invalid_requests_are_rej
     assert_eq!(pending_count(root.path())?, 2);
     assert_eq!(fs::read_to_string(orphan)?, "{partial write");
 
-    fs::write(directory.join("requests/.tmp-invalid"), "{partial write")?;
+    fs::write(directory.join("requests.json"), "{partial write")?;
     let output = Command::new(env!("CARGO_BIN_EXE_noema"))
         .arg("--root")
         .arg(root.path())

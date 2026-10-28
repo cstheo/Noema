@@ -13,9 +13,11 @@ Corpus and Noema supply task context. Agents invoke Tools, record outcomes in Co
 ## Principles
 
 - Keep changes clean, concise, and organized. Reuse existing structures.
+- Do not add application-level hashing, fingerprints, or checksum metadata. Use stable IDs, direct comparisons, and only necessary validation.
 - Follow [Asterinas commit conventions](https://asterinas.github.io/book/to-contribute/coding-guidelines/for-maintainability/process.html): imperative subjects up to 72 characters, backticks for identifiers, and one logical change per commit. Amend local review fixes.
 - Keep agent instructions here. Use directory READMEs for purpose, navigation, and local conventions.
 - Start with the nearest README. Use `rg` in relevant directories; exclude `**/sources/**` unless implementation evidence is needed.
+- Keep sessions rooted in Noema. For [workspace](workspace/README.md) tasks, recall with `context --cwd PATH` and follow checkout instructions.
 - Inspect current files and behavior. Distinguish plans, implementation, and verified outcomes.
 - Record revisions, environment, commands, and outcomes for experiments. Distinguish published claims, static checks, and runtime proof.
 - Preserve sources and ownership. Link derived claims to evidence; distinguish explicit statements, observations, and inferences.

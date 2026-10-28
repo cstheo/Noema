@@ -22,7 +22,7 @@ function createNoteArchive(plugin, { filesystem = fs } = {}) {
       fail("INVALID_ARCHIVE", "The note archive storage is unavailable.");
     }
     const shared = path.join(storageRoot, "shared");
-    const partition = path.join(shared, crypto.createHash("sha256").update(serverId).digest("hex").slice(0, 24));
+    const partition = path.join(shared, serverId);
     const folder = path.join(partition, "deleted-notes");
     const ancestors = [];
     let current = path.parse(storageRoot).root;

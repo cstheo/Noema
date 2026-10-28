@@ -362,7 +362,6 @@ pub fn prepare_app(root: &Path) -> Result<PathBuf> {
         "CFBundleIdentifier":LABEL,"CFBundleExecutable":"noema-mobile",
         "CFBundleName":"Noema","CFBundleDisplayName":"Noema","CFBundlePackageType":"APPL",
         "CFBundleVersion":"1","CFBundleShortVersionString":env!("CARGO_PKG_VERSION"),
-        "NoemaSourceDigest":util::digest(&bytes),
         "LSMinimumSystemVersion":"14.0","LSUIElement":true,"NSHighResolutionCapable":true,
         "NSAppleEventsUsageDescription":"Noema reads requests and adds personal answers in your Noema Notes folder.",
         "NSRemindersFullAccessUsageDescription":"Noema synchronizes your dedicated Noema reminder list with daily notes.",
@@ -370,16 +369,6 @@ pub fn prepare_app(root: &Path) -> Result<PathBuf> {
     });
     let app = application_dir(root);
     util::no_symlinks(&app)?;
-    // Signing changes executable bytes; compare the original build identity instead.
-    if binary.is_file()
-        && fs::read(app.join("Contents/Info.plist"))
-            .ok()
-            .and_then(|bytes| plist::from_bytes::<Value>(&bytes).ok())
-            .as_ref()
-            == Some(&info)
-    {
-        return Ok(binary);
-    }
     let local = app.parent().context("Missing application directory")?;
     fs::create_dir_all(local)?;
     let staging = tempfile::Builder::new()

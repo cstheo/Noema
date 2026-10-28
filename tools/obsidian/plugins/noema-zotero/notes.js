@@ -1,6 +1,6 @@
 "use strict";
 
-const { createHash } = require("node:crypto");
+const { randomUUID } = require("node:crypto");
 
 const KEY = /^[A-Z0-9]{8}$/;
 const SERVER = /^[A-Za-z0-9_-]{1,128}$/;
@@ -24,10 +24,6 @@ function identity(value) {
     throw new Error("The note has invalid Zotero identity metadata.");
   }
   return { serverId: value.serverId, key: value.key, parentKey: value.parentKey, version: value.version };
-}
-
-function contentHash(value) {
-  return createHash("sha256").update(text(value), "utf8").digest("hex");
 }
 
 function noteFilename(title, index = 1) {
@@ -247,7 +243,7 @@ function htmlToken(source, start) {
 }
 
 function protectHTML(body, DOMParser) {
-  const prefix = `NOEMAZOTERORAW${contentHash(body).slice(0, 24).toUpperCase()}TOKEN`;
+  const prefix = `NOEMAZOTERORAW${randomUUID().replaceAll("-", "").toUpperCase()}TOKEN`;
   if (body.includes(prefix)) throw new Error("The note contains a reserved conversion marker.");
   const fragments = [];
   let output = "", cursor = 0, i = 0, codeFence = null;
@@ -328,8 +324,7 @@ function createBaseline({ serverId, key, parentKey, version, localBody, remoteHT
   const checked = identity({ serverId, key, parentKey, version });
   const body = text(localBody), html = text(remoteHTML, "Zotero note HTML");
   if (typeof canPush !== "boolean") throw new Error("The baseline requires an explicit conversion safety flag.");
-  return { schema: 1, ...checked, localBody: body, remoteHTML: html, canPush,
-    localHash: contentHash(body), remoteHash: contentHash(html) };
+  return { schema: 1, ...checked, localBody: body, remoteHTML: html, canPush };
 }
 
 function decideSync({ base, local, remote } = {}) {
@@ -348,13 +343,13 @@ function decideSync({ base, local, remote } = {}) {
     identity(base);
     if (base.schema !== 1 || typeof base.canPush !== "boolean"
       || ["serverId", "key", "parentKey"].some(field => base[field] !== checked[field])
-      || contentHash(base.localBody) !== base.localHash || contentHash(base.remoteHTML) !== base.remoteHash) throw new Error("invalid");
+      || typeof base.localBody !== "string" || typeof base.remoteHTML !== "string") throw new Error("invalid");
   } catch (_) { return result("conflict", "No matching synchronization baseline exists. Review both versions before replacing either side."); }
   if (local.version !== base.version || remote.version < base.version) {
     return result("conflict", "The note version does not match its synchronization baseline.");
   }
-  const localChanged = contentHash(local.body) !== base.localHash;
-  const remoteChanged = contentHash(remote.html) !== base.remoteHash;
+  const localChanged = text(local.body) !== text(base.localBody);
+  const remoteChanged = text(remote.html) !== text(base.remoteHTML);
   if (localChanged && base.canPush === false) {
     return result("conflict", "The source note uses unsupported HTML. Its local source mirror cannot replace the Zotero note.");
   }
@@ -367,4 +362,4 @@ function decideSync({ base, local, remote } = {}) {
 }
 
 module.exports = { noteFilename, makeMarkdown, parseMarkdown, paperProperties, remoteToMarkdown, markdownToZotero,
-  contentHash, createBaseline, decideSync };
+  createBaseline, decideSync };

@@ -2,7 +2,6 @@ use anyhow::{Context, Result, ensure};
 use chrono::Utc;
 use clap::{Args, Parser, Subcommand};
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 use std::{
     collections::BTreeMap,
     fs,
@@ -419,8 +418,7 @@ fn apply(vault: &Path, plan: Plan) -> Result<Option<PathBuf>> {
             atomic_write(&backup.join("before").join(relative), before)?;
         }
         manifest["files"][relative] = json!({
-            "existed": change.before.is_some(),
-            "after_sha256": format!("{:x}", Sha256::digest(&change.after))
+            "existed": change.before.is_some()
         });
     }
     let mut bytes = serde_json::to_vec_pretty(&manifest)?;

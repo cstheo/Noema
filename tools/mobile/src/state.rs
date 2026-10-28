@@ -64,19 +64,22 @@ impl Paths {
             CREATE TABLE IF NOT EXISTS requests (
                 note_id TEXT PRIMARY KEY, request TEXT NOT NULL, version TEXT NOT NULL,
                 observed_at REAL NOT NULL, status TEXT NOT NULL, answer TEXT,
-                delivery_hash TEXT, error TEXT, updated TEXT NOT NULL
+                delivery TEXT, error TEXT, updated TEXT NOT NULL
             );
             CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS todo_links (id TEXT PRIMARY KEY,source TEXT NOT NULL,remote TEXT,issue TEXT);",
         )?;
-        if !db
+        let columns = db
             .prepare("PRAGMA table_info(requests)")?
             .query_map([], |row| row.get::<_, String>(1))?
-            .collect::<rusqlite::Result<Vec<_>>>()?
-            .iter()
-            .any(|name| name == "checkpoint")
-        {
-            db.execute("ALTER TABLE requests ADD COLUMN checkpoint TEXT", [])?;
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        for column in ["checkpoint", "delivery"] {
+            if !columns.iter().any(|name| name == column) {
+                db.execute(
+                    &format!("ALTER TABLE requests ADD COLUMN {column} TEXT"),
+                    [],
+                )?;
+            }
         }
         fs::set_permissions(path, fs::Permissions::from_mode(0o600))?;
         Ok(db)
@@ -121,34 +124,29 @@ pub struct Request {
     pub observed_at: f64,
     pub status: String,
     pub answer: Option<String>,
-    pub delivery_hash: Option<String>,
+    pub delivery: Option<String>,
     pub error: Option<String>,
     pub updated: String,
     pub checkpoint: Option<Checkpoint>,
 }
 
-/// A small receipt for the answered prefix; the transcript itself stays in Notes.
+/// The answered prefix distinguishes follow-ups from edits.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Checkpoint {
-    length: usize,
-    hash: String,
+    text: String,
 }
 
 impl Checkpoint {
     pub fn new(text: &str) -> Self {
-        let text = normalize(text);
         Self {
-            length: text.len(),
-            hash: util::digest(text),
+            text: normalize(text),
         }
     }
 
     pub fn followup(&self, text: &str) -> Option<String> {
         let text = normalize(text);
-        let prefix = text.get(..self.length)?;
-        let suffix = text.get(self.length..)?;
-        (util::digest(prefix) == self.hash && (suffix.is_empty() || suffix.starts_with(' ')))
-            .then(|| suffix.trim().to_owned())
+        let suffix = text.strip_prefix(&self.text)?;
+        (suffix.is_empty() || suffix.starts_with(' ')).then(|| suffix.trim().to_owned())
     }
 }
 
@@ -165,7 +163,7 @@ impl Request {
             observed_at: row.get("observed_at")?,
             status: row.get("status")?,
             answer: row.get("answer")?,
-            delivery_hash: row.get("delivery_hash")?,
+            delivery: row.get("delivery")?,
             error: row.get("error")?,
             updated: row.get("updated")?,
             checkpoint: row
@@ -204,7 +202,7 @@ pub fn request(db: &Connection, note_id: &str) -> Result<Option<Request>> {
 pub fn observe(db: &Connection, note_id: &str, request: &str, version: &str) -> Result<()> {
     db.execute("INSERT INTO requests (note_id,request,version,observed_at,status,updated)
         VALUES (?1,?2,?3,?4,'pending',?5) ON CONFLICT(note_id) DO UPDATE SET
-        request=?2,version=?3,observed_at=?4,status='pending',answer=NULL,delivery_hash=NULL,error=NULL,updated=?5",
+        request=?2,version=?3,observed_at=?4,status='pending',answer=NULL,delivery=NULL,error=NULL,updated=?5",
         rusqlite::params![note_id,request,version,epoch(),util::now()])?;
     Ok(())
 }

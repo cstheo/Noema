@@ -1,7 +1,6 @@
 ---
 record_id: 2026-10-28-memory-verification
 date: 2026-10-28
-request_sha256: 6a6a624a81c479b9e7c65ff34630997883503162eca61e76eb6c4cdcab5d0121
 entries:
 - work.noema#verified-lifecycle
 retracts: []

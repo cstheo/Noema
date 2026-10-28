@@ -55,7 +55,6 @@ function checkedPayload(value) {
     position: { pageIndex: position.pageIndex, rects: position.rects.map(rect => rect.slice()) } };
 }
 
-function hashPath(value) { return crypto.createHash("sha256").update(value).digest("hex"); }
 function notePath(value) {
   const raw = path.posix.basename(value).replace(/\.pdf$/i, "").replace(/[<>:"/\\|?*\x00-\x1f\x7f]/g, " ").trim() || "PDF";
   let stem = "";
@@ -126,13 +125,13 @@ function installLocalPdf(plugin) {
       throw new Error("The PDF note registry is invalid. Its sidecar was kept.");
     }
     for (const entry of state.deletedNotes || []) {
-      if (!UUID.test(entry?.id || "") || entry.noteId !== state.noteId || !/^[0-9a-f]{64}$/.test(entry.contentHash || "")
+      if (!UUID.test(entry?.id || "") || entry.noteId !== state.noteId
         || typeof entry.deletedAt !== "string" || !Number.isFinite(Date.parse(entry.deletedAt))) throw new Error("The archived PDF note registry is invalid.");
       checkedNotePath(entry.path);
     }
     if (state.noteMove !== undefined) {
       const move = state.noteMove;
-      if (!move || move.from !== state.notesPath || !/^[0-9a-f]{64}$/.test(move.contentHash || "")) throw new Error("The pending PDF note move is invalid.");
+      if (!move || move.from !== state.notesPath) throw new Error("The pending PDF note move is invalid.");
       checkedNotePath(move.from); checkedNotePath(move.to);
       if (move.from === move.to) throw new Error("The pending PDF note move has identical paths.");
     }
@@ -151,9 +150,9 @@ function installLocalPdf(plugin) {
   }
 
   async function readState(checked) {
-    const filename = path.join(folder, `${hashPath(checked)}.json`);
+    const filename = path.join(folder, checked, "annotations.json");
     try {
-      await directories(folder);
+      await directories(path.dirname(filename));
       const info = await fs.lstat(filename);
       if (!info.isFile() || info.isSymbolicLink() || info.size > MAX_BYTES || await fs.realpath(filename) !== filename) throw new Error("The annotation sidecar must be a regular file within the 8 MiB limit.");
       const source = await fs.readFile(filename, "utf8");
@@ -164,6 +163,17 @@ function installLocalPdf(plugin) {
       return current;
     } catch (error) {
       if (error.code !== "ENOENT") throw error;
+      const candidates = await fs.readdir(folder, { withFileTypes: true }).catch(error => { if (error.code === "ENOENT") return []; throw error; });
+      for (const candidate of candidates.filter(candidate => candidate.isFile() && candidate.name.endsWith(".json"))) {
+        const previous = path.join(folder, candidate.name), info = await fs.lstat(previous);
+        if (info.size > MAX_BYTES) continue;
+        const state = JSON.parse(await fs.readFile(previous, "utf8"));
+        if (state.path !== checked) continue;
+        validateState(state, checked);
+        await directories(path.dirname(filename), true);
+        await fs.rename(previous, filename);
+        return readState(checked);
+      }
       return { filename, source: null, state: { version: 1, path: checked, notesPath: notePath(checked), noteId: crypto.randomBytes(16).toString("hex"),
         notesCreated: false, noteDeleted: false, deletedNotes: [], annotations: [], archivedAnnotations: [] } };
     }
@@ -174,12 +184,12 @@ function installLocalPdf(plugin) {
     validateState(state, state.path);
     const source = JSON.stringify(state, null, 2) + "\n";
     if (Buffer.byteLength(source) > MAX_BYTES) throw new Error("The PDF annotation sidecar exceeds its 8 MiB limit.");
-    await directories(folder, true);
+    await directories(path.dirname(current.filename), true);
     const temporary = `${current.filename}.${crypto.randomUUID()}.tmp`;
     try {
       const handle = await fs.open(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
       try { await handle.writeFile(source, "utf8"); await handle.sync(); } finally { await handle.close(); }
-      await directories(folder); active();
+      await directories(path.dirname(current.filename)); active();
       if (current.source === null) {
         // Exclusive publication keeps a concurrent or mismatched sidecar intact.
         await fs.link(temporary, current.filename);
@@ -261,7 +271,7 @@ function installLocalPdf(plugin) {
     checkedNotePath(preferred);
     await directories(path.dirname(path.join(base, preferred)));
     for (let attempt = 0; attempt < 32; attempt++) {
-      const suffix = attempt ? `.${hashPath(current.state.path).slice(0, 16)}${attempt > 1 ? `-${attempt - 1}` : ""}` : "";
+      const suffix = attempt ? `.${current.state.noteId.slice(0, 16)}${attempt > 1 ? `-${attempt - 1}` : ""}` : "";
       const candidate = suffix ? preferred.replace(/\.notes\.md$/, `${suffix}.notes.md`) : preferred;
       const absolute = path.join(base, candidate);
       try {
@@ -324,7 +334,7 @@ function installLocalPdf(plugin) {
     const before = await readNote(current, true);
     const after = await readNote({ ...current, state: { ...current.state, notesPath: move.to } }, true);
     if (before && after) throw new Error("Both PDF note move paths exist. Their contents were kept; resolve the move conflict first.");
-    if (!after && (!before || hashPath(before.source) !== move.contentHash)) throw new Error("The pending PDF note move changed. Its files and registry were kept.");
+    if (!after && !before) throw new Error("The pending PDF note move changed. Its files and registry were kept.");
     // Native rename updates links after moving the file. A sole destination
     // with the exact ownership marker is authoritative even when its body now
     // differs from the prepared source. Never replace that current content.
@@ -357,7 +367,7 @@ function installLocalPdf(plugin) {
       catch (error) { if (error.code !== "ENOENT") throw error; }
       const rename = plugin.app.fileManager?.renameFile?.bind(plugin.app.fileManager) || vault.rename?.bind(vault);
       if (!rename) throw new Error("The Obsidian file rename API is unavailable.");
-      current.state.noteMove = { from: current.state.notesPath, to: target, contentHash: hashPath(note.source) };
+      current.state.noteMove = { from: current.state.notesPath, to: target };
       await publish(current, current.state);
       try {
         const latest = await readNote(current);
@@ -405,7 +415,7 @@ function installLocalPdf(plugin) {
     const absolute = path.join(deletedFolder, `${entry.id}.md`), info = await fs.lstat(absolute);
     if (!info.isFile() || info.isSymbolicLink() || info.size > MAX_BYTES || await fs.realpath(absolute) !== absolute) throw new Error("The PDF note archive must be a regular file.");
     const source = await fs.readFile(absolute, "utf8");
-    if (hashPath(source) !== entry.contentHash || !ownedNote(source, state)) throw new Error("The archived PDF note changed or belongs to another PDF. It was kept.");
+    if (!ownedNote(source, state)) throw new Error("The archived PDF note changed or belongs to another PDF. It was kept.");
     return source;
   }
 
@@ -429,7 +439,7 @@ function installLocalPdf(plugin) {
         if (note.source !== prepared.source) throw new Error("The PDF note changed while confirming deletion. Its latest text was kept; reopen the dialog.");
         if (typeof vault.trash !== "function") throw new Error("Obsidian's local Trash API is unavailable. Your note was kept.");
         const id = await archiveNote(note.source);
-        const entry = { id, path: prepared.path, noteId: prepared.noteId, contentHash: hashPath(note.source), deletedAt: new Date().toISOString() };
+        const entry = { id, path: prepared.path, noteId: prepared.noteId, deletedAt: new Date().toISOString() };
         current.state.deletedNotes = [...(current.state.deletedNotes || []), entry]; current.state.noteDeleted = true;
         await publish(current, current.state);
         try {
@@ -636,16 +646,23 @@ function installLocalPdf(plugin) {
     if (!Array.isArray(file.children) || !oldPath || /[\\\x00-\x1f:]/.test(oldPath)
       || oldPath.startsWith("/") || oldPath.split("/").some(part => !part || part === "." || part === "..")) return;
     serial(async () => {
+      async function sidecars(directory) {
+        const files = [];
+        for (const entry of await fs.readdir(directory, { withFileTypes: true })) {
+          const target = path.join(directory, entry.name);
+          if (entry.isDirectory()) files.push(...await sidecars(target));
+          else if (entry.isFile() && entry.name === "annotations.json") files.push(target);
+        }
+        return files;
+      }
       let files;
-      try { await directories(folder); files = await fs.readdir(folder); } catch (error) { if (error.code === "ENOENT") return; throw error; }
-      for (const filename of files) {
-        if (!/^[0-9a-f]{64}\.json$/.test(filename)) continue;
-        const absolute = path.join(folder, filename), info = await fs.lstat(absolute);
+      try { await directories(folder); files = await sidecars(folder); } catch (error) { if (error.code === "ENOENT") return; throw error; }
+      for (const absolute of files) {
+        const info = await fs.lstat(absolute);
         if (!info.isFile() || info.isSymbolicLink() || info.size > MAX_BYTES) throw new Error("An invalid sidecar was kept during folder rename.");
-        let state;
-        try { state = JSON.parse(await fs.readFile(absolute, "utf8")); } catch { throw new Error("A malformed sidecar was kept during folder rename."); }
+        const state = JSON.parse(await fs.readFile(absolute, "utf8"));
         if (typeof state.path !== "string" || !state.path.startsWith(`${oldPath}/`)) continue;
-        if (filename !== `${hashPath(state.path)}.json`) throw new Error("A mismatched sidecar was kept during folder rename.");
+        if (absolute !== path.join(folder, pdfPath(state.path, config), "annotations.json")) throw new Error("A mismatched sidecar was kept during folder rename.");
         await movePdf(`${file.path}/${state.path.slice(oldPath.length + 1)}`, state.path, { from: oldPath, to: file.path });
       }
     }).catch(error => notice(`PDF annotations were kept: ${error.message}`));
@@ -656,4 +673,4 @@ function installLocalPdf(plugin) {
   return { annotationsFor, createAnnotation, editAnnotation, addSelection, openNotes, notesInfo, moveNotesToPdfDirectory, deleteNotes, restoreNotes, restoreAnnotations, dispose };
 }
 
-module.exports = { installLocalPdf, pdfPath, checkedPayload, hashPath, notePath };
+module.exports = { installLocalPdf, pdfPath, checkedPayload, notePath };

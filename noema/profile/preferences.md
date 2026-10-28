@@ -35,3 +35,12 @@ Keep agent instructions in the root AGENTS.md; use README files in subdirectorie
 - Evidence: [source](<../../corpus/projects/Noema/records/2026-10-28-memory-backbone.md#source-ownership>)
 
 Preserve CS229 study-note content separately; do not commit it as part of Noema work.
+
+## simple-state
+
+- Basis: explicit
+- Status: active
+- As of: 2026-10-29
+- Evidence: [source](<../../corpus/projects/Noema/records/2026-10-29-simple-state.md#request>)
+
+Use stable IDs and direct content comparisons. Do not add application-level hashing or checksum metadata. Keep validation minimal.

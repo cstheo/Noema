@@ -1,7 +1,6 @@
 use anyhow::{Context, Result, bail, ensure};
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use std::path::{Component, Path, PathBuf};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -99,10 +98,6 @@ impl Fence {
         }
         true
     }
-}
-
-pub fn digest(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
 }
 
 pub fn valid_id(id: &str) -> bool {
@@ -389,7 +384,6 @@ mod tests {
         };
         page.meta.resume = Some(page.entries[0].evidence[0].clone());
         let rendered = render_page(&page)?;
-        assert!(!rendered.contains("Snapshot") && !rendered.contains("sha256:"));
         assert_eq!(parse_page(&page.path, &rendered)?, page);
         let mut indented = page.clone();
         indented.entries[0].text =

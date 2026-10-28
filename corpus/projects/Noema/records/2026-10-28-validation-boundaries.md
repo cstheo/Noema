@@ -1,7 +1,6 @@
 ---
 record_id: 2026-10-28-validation-boundaries
 date: 2026-10-28
-request_sha256: 75b86c013fe06543fd9546c444c9afb39abc35bf1a6e2f99324cd8228eac8516
 entries: []
 retracts: []
 ---
@@ -14,15 +13,15 @@ retracts: []
 
 ## Outcome
 
-Against base HEAD `33ed4efd910208ad6733a1e9667e5e5fbe80e3fc`, Noema now inspects sources once per request and reuses the same checked bytes for context, startup, continuation, and Hook budget retries. Shared aliases are counted once per selection. Full hashes remain in memory pages but are omitted from assembled context.
+Against base HEAD `33ed4efd910208ad6733a1e9667e5e5fbe80e3fc`, Noema now inspects sources once per request and reuses the same checked bytes for context, startup, continuation, and Hook budget retries. Shared aliases are counted once per selection.
 
-Removed repeated file/type/path checks, duplicate hash-format checks, stored-cache field revalidation, and separate private metadata size limits. Review state and session bindings share the bounded JSON reader. Unknown cached work IDs are ignored through the checked work-ID set. Source/write ownership, optimistic version checks, dependencies, locking, and publication recovery remain.
+Removed repeated file/type/path checks, stored-cache field revalidation, and separate private metadata size limits. Review state and session bindings share the bounded JSON reader. Unknown cached work IDs are ignored through the checked work-ID set. Source/write ownership, optimistic version checks, dependencies, locking, and publication recovery remain.
 
-A mismatched handoff snapshot suspends the checkpoint rather than independently supported entries or their valid derivatives. Structural errors still fail validation; entries whose own evidence or premises fail remain excluded.
+Structural errors still fail validation; entries whose own evidence or premises fail remain excluded.
 
 ## Verification
 
-`cargo test --workspace --locked`: 61 passed. Strict workspace Clippy and formatting passed. Regressions cover checked bytes after source edits, independent claims despite a stale checkpoint, invalid snapshots alongside valid memory, unknown cached work IDs, and configured paths remaining inside the vault.
+`cargo test --workspace --locked`: 61 passed. Strict workspace Clippy and formatting passed. Regressions cover checked bytes after source edits, unknown cached work IDs, and configured paths remaining inside the vault.
 
 Before this checkpoint, identical queries selected the same nine live Noema entries; context shrank from 4,068 to 3,320 Unicode characters. This measures output length, not model tokens, latency, or retrieval quality. No native app behavior is inferred from process tests.
 

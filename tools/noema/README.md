@@ -48,7 +48,7 @@ Use a new immutable Corpus record for each update. Replace this example's eviden
 }
 ```
 
-Existing pages require `expected`, the SHA256 of their current bytes (`shasum -a 256 PAGE`). This is a write precondition, not stored page metadata. Updates append entries; existing IDs cannot be rewritten. Evidence keeps paths and anchors; Git tracks revisions. Optional entry fields are `depends_on`, `supersedes`, and `review_after`; top-level `retracts` withdraws entry references. See the [page format](../../noema/README.md#pages).
+Updates append entries to current pages under a write lock; existing IDs cannot be rewritten. Evidence keeps paths and anchors; Git tracks revisions. Optional entry fields are `depends_on`, `supersedes`, and `review_after`; top-level `retracts` withdraws entry references. See the [page format](../../noema/README.md#pages).
 
 New entries are active. Corrections suspend dependent memories. Entry changes clear affected handoffs unless refreshed. A refreshed `resume` must point to the new record. Existing handoffs can be refreshed with `entries: []`; new pages need a supported entry. Identical replay is a no-op; different content at an existing record path fails.
 

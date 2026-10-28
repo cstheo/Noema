@@ -6,6 +6,8 @@ type: index
 
 Implementation context and source entry points, organized by project.
 
+Local checkouts and runs live in [Workspace](../../workspace/README.md).
+
 [Corpus](../README.md)
 
 | Project context | Focus | Source entry |

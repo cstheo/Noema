@@ -1,7 +1,6 @@
 ---
 record_id: 2026-10-28-memory-backbone
 date: 2026-10-28
-request_sha256: 032cd2d0451fa71d1226cf169fffb7ae12f31e6fe9ecdddb47f382a806580867
 entries:
 - profile.preferences#concise-docs
 - profile.preferences#root-agent-instructions

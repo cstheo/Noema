@@ -103,7 +103,7 @@ function createAnnotationTrash(plugin, { filesystem = fs } = {}) {
       fail("INVALID_RECOVERY", "The annotation recovery storage is unavailable.");
     }
     const storageRoot = plugin.storageReal;
-    const folder = path.join(storageRoot, "shared", crypto.createHash("sha256").update(serverId).digest("hex").slice(0, 24));
+    const folder = path.join(storageRoot, "shared", serverId);
     return { serverId, storageRoot, folder, file: path.join(folder, "annotations-trash.json") };
   }
 

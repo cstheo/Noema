@@ -1,7 +1,5 @@
 "use strict";
 
-const { createHash } = require("node:crypto");
-
 const API_KEY = /^[A-Za-z0-9]{32}$/;
 const MAX_SERVER_ID_LENGTH = 256;
 
@@ -52,7 +50,7 @@ function createAuthorizationStore(plugin) {
   }
 
   function secretId(serverId) {
-    return `noema-zotero-${createHash("sha256").update(serverId).digest("hex").slice(0, 32)}`;
+    return `nz-${Buffer.from(serverId, "utf8").toString("hex")}`;
   }
 
   function call(value, method, serverId, ...args) {

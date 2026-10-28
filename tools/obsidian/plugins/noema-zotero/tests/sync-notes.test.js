@@ -46,7 +46,7 @@ async function fixture(t) {
     return target;
   };
   f.registryPath = () => path.join(base, ".obsidian/zotero/shared",
-    crypto.createHash("sha256").update(SERVER).digest("hex").slice(0, 24), "notes.json");
+    SERVER, "notes.json");
   f.registry = async () => JSON.parse(await fs.readFile(f.registryPath(), "utf8"));
   f.addFile = async (relative, body, exclusive = false) => {
     await fs.mkdir(path.dirname(f.physical(relative)), { recursive: true });
@@ -2127,4 +2127,15 @@ test("old Unfiled notes move directly into papers without changing their source 
   f.authorize(); await f.setLocal("Edited after flattening Unfiled");
   await f.plugin.refreshPaper(PARENT);
   assert.match(f.remote.get(NOTE).note, /Edited after flattening Unfiled/);
+});
+
+
+test("registry migration preserves note identities and baselines", async t => {
+  const f = await fixture(t), entry = await f.importNote();
+  const registry = await f.registry(), previous = path.join(path.dirname(path.dirname(f.registryPath())), "previous-layout");
+  await fs.rename(path.dirname(f.registryPath()), previous);
+  await f.restart();
+  assert.equal(f.entry().fileId, entry.fileId);
+  assert.deepEqual((await f.registry()).entries[0].base, registry.entries[0].base);
+  assert.equal(f.writes().length, 0);
 });

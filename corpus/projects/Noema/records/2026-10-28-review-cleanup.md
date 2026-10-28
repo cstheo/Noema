@@ -1,7 +1,6 @@
 ---
 record_id: 2026-10-28-review-cleanup
 date: 2026-10-28
-request_sha256: 08e8fd86f93cad67db5c7e10d16a7cdf456d735b578a575314ffa9dabbc38e72
 entries: []
 retracts: []
 ---
@@ -23,7 +22,7 @@ Reviewed the uncommitted Noema work against base HEAD `dc2999c62565777643bb52371
 
 ## Verification
 
-`cargo test --workspace --locked`: 58 passed. `make -C tools check`: formatting and strict workspace Clippy passed. Release Noema binaries rebuilt. Both skill validators, links/anchors, and memory check passed. Independent review found no remaining actionable issues. Hashes confirmed 14 existing source/other-memory files unchanged.
+`cargo test --workspace --locked`: 58 passed. `make -C tools check`: formatting and strict workspace Clippy passed. Release Noema binaries rebuilt. Both skill validators, links/anchors, and memory check passed. Independent review found no remaining actionable issues. Fourteen existing source and memory files were unchanged.
 
 ## Handoff
 

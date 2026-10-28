@@ -1,5 +1,4 @@
 use anyhow::{Context, Result, ensure};
-use sha2::{Digest, Sha256};
 use std::{
     collections::BTreeSet,
     fs,
@@ -95,10 +94,6 @@ impl Drop for Captured {
 
 pub fn now() -> String {
     chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, false)
-}
-
-pub fn digest(text: impl AsRef<[u8]>) -> String {
-    format!("{:x}", Sha256::digest(text.as_ref()))
 }
 
 pub fn no_symlinks(path: &Path) -> Result<()> {

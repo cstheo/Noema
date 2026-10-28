@@ -1,7 +1,6 @@
 ---
 record_id: 2026-10-28-context-hooks
 date: 2026-10-28
-request_sha256: f823e46e43704996e7b79ee77c26b66e6d04108f5337418ce631c55f7c289636
 entries:
 - work.noema#context-hook-config
 retracts: []
@@ -19,7 +18,7 @@ The approval covers the reviewed project configuration, not automatic approval o
 
 ## Installation
 
-The reviewed configuration was installed as `.codex/hooks.json`, SHA256 `9d8314cab79cf601e8d404b0e7de9efdf48561b0736f0fa0768f86c688c092f3`. It declares SessionStart and UserPromptSubmit calls to the local release `noema-hook` adapter. The source configuration has one home at that standard project path.
+The reviewed configuration was installed as `.codex/hooks.json`. It declares SessionStart and UserPromptSubmit calls to the local release `noema-hook` adapter. The source configuration has one home at that standard project path.
 
 The adapter's six process tests passed, and the release workspace build passed. Only private session work bindings are writable by the adapter; user prompts are not cached. Native hook trust settings were unchanged.
 

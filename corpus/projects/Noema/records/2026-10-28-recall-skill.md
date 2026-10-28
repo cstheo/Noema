@@ -1,7 +1,6 @@
 ---
 record_id: 2026-10-28-recall-skill
 date: 2026-10-28
-request_sha256: 6c37035693db937a87f40999c05f07f301b9cac07a74b0ff49ec8957e0d6368d
 entries:
 - work.noema#recall-skill
 retracts: []
@@ -40,13 +39,9 @@ Environment: macOS, repository base HEAD `6808abd256004f966c62714e46f933c05b8494
 | Translate hello | Returned the translation without skill, tool, or file access. |
 | Explicit memory correction | Read the schema; ran record dry-run, record, check, and context. Added one source record, appended the current direction, superseded its predecessor, and preserved original evidence. |
 
-Independent byte-hash comparison confirmed no changes to the two read-only fixtures. The correction changed only its work page and added one record; old source hashes were unchanged. A separate process returned only the two new active entries. Fixture `check --json` returned empty errors, warnings, and invalid lists.
+The two read-only fixtures were unchanged. The correction changed only its work page and added one record; original sources were unchanged. A separate process returned only the two new active entries. Fixture `check --json` returned empty errors, warnings, and invalid lists.
 
 The official `quick_validate.py` passed using a temporary PyYAML environment. UI metadata, relative prose links, the discovery symlink, and the root-only AGENTS layout passed static checks. Actual-vault `check --json` and `git diff --check` passed. No Git commit was created.
-
-Tested SKILL SHA256: `7e0535425db13b518ae1ab6be1536c68352480ce78c4fbdaa352062ae487d5af`.
-Command reference SHA256: `92d83fc4e088ed52463a4b50b6c7320119809702528e8da39a979ebf25953147`.
-CLI SHA256: `97b095200212d24e66bc4f4739771f03c0a5368a3cb4870747443211ee662d38`.
 
 These trials establish limited local behavior, not native host discovery, automatic skill selection, general recall quality, or token/latency gains. No controlled baseline benchmark was run.
 

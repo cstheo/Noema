@@ -1,6 +1,5 @@
 use anyhow::{Context, Result, ensure};
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 use std::{
     collections::BTreeMap,
     fs,
@@ -103,10 +102,6 @@ impl Fixture {
     }
 }
 
-fn sha256(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
-}
-
 fn entry(id: &str, basis: &str, text: &str, source: &str) -> Value {
     json!({
         "id": id,
@@ -131,7 +126,6 @@ fn seed_request() -> Value {
         "body": "# Test evidence\n\n## Request\nThe current mode is alpha. Prefer brief explanations.\n\n## Handoff\nNext: implement the reader.\n",
         "pages": [{
             "path": PAGE,
-            "expected": null,
             "id": "work.test",
             "summary": "Decisions and continuation for Test Work.",
             "aliases": ["Test Work", "测试工作"],
@@ -140,7 +134,6 @@ fn seed_request() -> Value {
             "entries": [entry("mode", "observed", OLD, SOURCE), dependent, transitive]
         }, {
             "path": "noema/profile/preferences.md",
-            "expected": null,
             "id": "profile.preferences",
             "summary": "Writing preferences.",
             "entries": [entry("brevity", "explicit", "Prefer brief explanations.", SOURCE)]
@@ -149,7 +142,7 @@ fn seed_request() -> Value {
     })
 }
 
-fn correction_request(fixture: &Fixture) -> Result<Value> {
+fn correction_request(_fixture: &Fixture) -> Result<Value> {
     let source = "corpus/projects/Test/records/correction.md";
     let mut replacement = entry("mode-v2", "explicit", NEW, source);
     replacement["supersedes"] = json!(["work.test#mode"]);
@@ -160,7 +153,6 @@ fn correction_request(fixture: &Fixture) -> Result<Value> {
         "body": "# Correction evidence\n\n## Request\nThe current mode is beta.\n\n## Handoff\nNext: validate beta recovery.\n",
         "pages": [{
             "path": PAGE,
-            "expected": sha256(&fs::read(fixture.root().join(PAGE))?),
             "id": "work.test",
             "summary": "Decisions and continuation for Test Work.",
             "resume": format!("{source}#handoff"),
@@ -217,7 +209,6 @@ fn simulate_interrupted_publication(fixture: &Fixture) -> Result<()> {
     let source_text = "# Interrupted evidence\n\n## Request\nA candidate update.\n";
     let pending = json!({
         "id": "interrupted",
-        "request_sha256": "c".repeat(64),
         "changes": [{
             "path": source,
             "before": null,
@@ -329,14 +320,10 @@ fn replay_rejects_modified_deadlines_and_evidence_pointers() -> Result<()> {
 }
 
 #[test]
-fn stale_updates_and_bad_references_preserve_every_published_file() -> Result<()> {
+fn bad_references_preserve_every_published_file() -> Result<()> {
     let fixture = Fixture::new()?;
     fixture.seed()?;
     let mut request = correction_request(&fixture)?;
-    request["pages"][0]["expected"] = json!("0".repeat(64));
-    fixture.reject_record(&request)?;
-
-    request = correction_request(&fixture)?;
     request["pages"][0]["entries"][0]["depends_on"] = json!(["work.missing#entry"]);
     fixture.reject_record(&request)?;
 
@@ -688,5 +675,33 @@ fn symlinked_records_and_memory_paths_are_rejected() -> Result<()> {
     symlink(outside.path(), fixture.root().join("noema/work"))?;
     fixture.reject_record(&seed_request())?;
     assert_eq!(fs::read_dir(outside.path())?.count(), 0);
+    Ok(())
+}
+
+#[test]
+fn independent_appends_preserve_current_entries() -> Result<()> {
+    let fixture = Fixture::new()?;
+    fixture.seed()?;
+    for id in ["first-append", "second-append"] {
+        let source = format!("corpus/projects/Test/records/{id}.md");
+        let request = json!({
+            "id": id, "date": "2026-10-29", "path": source,
+            "body": "# Evidence\n\n## Request\nAn independent observation.\n",
+            "pages": [{"path": PAGE, "id": "work.test", "summary": "Test work.",
+                "entries": [entry(id, "observed", "An independent observation.", &source)]}]
+        });
+        fixture.record(&request)?;
+    }
+    let context = fixture.context()?;
+    let selected = context["selected"].as_array().context("selected entries")?;
+    for id in [
+        "mode",
+        "dependent",
+        "transitive",
+        "first-append",
+        "second-append",
+    ] {
+        assert!(selected.contains(&json!(format!("work.test#{id}"))), "{id}");
+    }
     Ok(())
 }
