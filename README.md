@@ -10,7 +10,7 @@ An AI-native personal system for knowledge, memory, and action.
 | [Tools](tools/README.md) | Shared capabilities for humans and agents. |
 | [Noema](noema/README.md) | Evidence-linked memory, insights, and task context. |
 
-Agents [recall](tools/noema/skills/noema-recall/SKILL.md) task context and [consolidate](tools/noema/skills/noema-consolidate/SKILL.md) durable outcomes through `context`, `record`, and `check`.
+Agents [recall](tools/noema/skills/noema-recall/SKILL.md) relevant context and [consolidate](tools/noema/skills/noema-consolidate/SKILL.md) only information that changes future work. Records preserve significant evidence; memory and handoffs stay current.
 
 Use [Workspace](workspace/README.md) for local development and artifact reproduction.
 

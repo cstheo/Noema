@@ -12,7 +12,7 @@ use std::{
 };
 
 #[derive(Parser)]
-#[command(about = "Load Noema context and request lifecycle reviews")]
+#[command(about = "Load relevant Noema context")]
 struct Cli {
     #[arg(long)]
     root: Option<PathBuf>,
@@ -33,7 +33,7 @@ fn main() -> ExitCode {
             eprintln!("Noema hook: {error:#}");
             println!(
                 "{}",
-                json!({"systemMessage":"Noema lifecycle event could not be processed. Inspect the hook error before relying on automatic loading or consolidation."})
+                json!({"systemMessage":"Noema context could not be loaded. Inspect the hook error."})
             );
             ExitCode::FAILURE
         }

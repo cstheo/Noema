@@ -23,6 +23,14 @@ Systems and AI separate concept notes in `techniques/` from reading notes in `pa
 
 [Zotero workflow](../../tools/obsidian/plugins/noema-zotero/README.md)
 
+## Zotero organization
+
+- **01 Research:** CXL and Kernel Architecture views across venues.
+- **02 Venues:** Architecture, Operating Systems, Storage, Networking, and Databases, with existing venue/year collections.
+- **03 References:** Foundations and Related Work from individually selected sources.
+
+Collections share existing items and attachments. Preserve original metadata and tags. [Migration record](records/2026-10-29-zotero-reorganization.md).
+
 ## Maintenance
 
 - Zotero owns metadata, attachments, and native notes. Move synchronized Markdown through **Paper notes**; preserve UUIDs, registries, and baselines together.

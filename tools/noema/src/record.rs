@@ -19,8 +19,8 @@ use tempfile::NamedTempFile;
 pub struct Request {
     pub id: String,
     pub date: String,
-    pub path: String,
-    pub body: String,
+    pub path: Option<String>,
+    pub body: Option<String>,
     #[serde(default)]
     pub pages: Vec<Update>,
     #[serde(default)]
@@ -32,10 +32,13 @@ pub struct Request {
 pub struct Update {
     pub path: String,
     pub id: String,
-    pub summary: String,
+    pub summary: Option<String>,
     pub aliases: Option<Vec<String>>,
     pub scope: Option<Vec<String>>,
     pub resume: Option<String>,
+    pub handoff: Option<String>,
+    #[serde(default)]
+    pub remove: Vec<String>,
     #[serde(default)]
     pub entries: Vec<NewEntry>,
 }
@@ -74,8 +77,6 @@ pub struct Output {
 struct Header {
     record_id: String,
     date: String,
-    entries: Vec<String>,
-    retracts: Vec<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -97,63 +98,41 @@ pub fn apply(root: &Path, request: &Request, dry_run: bool) -> Result<Output> {
     require_complete(root)?;
     ensure!(model::valid_id(&request.id), "Invalid record id");
     ensure!(model::valid_date(&request.date), "Invalid record date");
-    ensure!(
-        store::record_path(&request.path),
-        "Records must be Markdown files under corpus/.../records/"
-    );
-    let record_path = store::writable_path(root, &request.path)?;
-    ensure!(
-        record_path.file_stem().and_then(|name| name.to_str()) == Some(request.id.as_str()),
-        "Record filename must match its id"
-    );
-    ensure!(!request.body.trim().is_empty(), "Record body is empty");
-    ensure!(
-        !request.pages.is_empty() || !request.retracts.is_empty(),
-        "Change set has no memory updates"
-    );
-    let header = Header {
-        record_id: request.id.clone(),
-        date: request.date.clone(),
-        entries: request
-            .pages
-            .iter()
-            .flat_map(|page| {
-                page.entries
-                    .iter()
-                    .map(|entry| format!("{}#{}", page.id, entry.id))
+    let source = source_record(root, request)?;
+    let mut overlay = Overlay::new();
+    if let Some((path, text)) = &source {
+        if let Some(existing) = current(root, path)? {
+            ensure!(
+                existing == *text,
+                "Record already exists with different content: {path}"
+            );
+            if !request.pages.is_empty() || !request.retracts.is_empty() {
+                verify_replay(request, &store::load_pages(root, &Overlay::new())?)?;
+            }
+            return Ok(output(request, Vec::new()));
+        }
+        overlay.insert(path.clone(), text.clone());
+    }
+    if request.pages.is_empty() && request.retracts.is_empty() {
+        let changes = source
+            .into_iter()
+            .map(|(path, after)| Change {
+                path,
+                before: None,
+                after,
             })
-            .collect(),
-        retracts: request.retracts.clone(),
-    };
-    let source = format!(
-        "---\n{}---\n\n{}\n",
-        serde_yaml_ng::to_string(&header)?,
-        request.body.trim_end()
-    );
-    ensure!(source.len() <= 1_048_576, "Source record exceeds 1 MiB");
-    // Build the candidate from one immutable snapshot of the original pages.
+            .collect();
+        return finish(root, request, changes, dry_run);
+    }
     let originals = store::load_texts(root, &Overlay::new())?;
     let mut pages = originals
         .iter()
         .map(|(path, text)| model::parse_page(path, text).with_context(|| format!("parse {path}")))
         .collect::<Result<Vec<_>>>()?;
-    if record_path.exists() {
-        let existing = store::read_text(root, &request.path, &Overlay::new())?;
-        ensure!(
-            existing == source,
-            "Record already exists with different content: {}",
-            request.path
-        );
-        verify_replay(request, &pages)?;
-        return Ok(Output {
-            id: request.id.clone(),
-            changed: Vec::new(),
-            already_recorded: true,
-        });
-    }
-    let mut overlay = Overlay::from([(request.path.clone(), source)]);
     let mut changed = BTreeSet::new();
     let mut refreshed = BTreeSet::new();
+    let mut revised = BTreeSet::new();
+    let mut supplied = BTreeSet::new();
     let mut seen = BTreeSet::new();
     for update in &request.pages {
         ensure!(
@@ -166,7 +145,7 @@ pub fn apply(root: &Path, request: &Request, dry_run: bool) -> Result<Output> {
             "Not a memory page: {}",
             update.path
         );
-        let file = store::writable_path(root, &update.path)?;
+        store::writable_path(root, &update.path)?;
         let index = pages.iter().position(|page| page.path == update.path);
         let mut page = match index {
             Some(index) => {
@@ -176,72 +155,139 @@ pub fn apply(root: &Path, request: &Request, dry_run: bool) -> Result<Output> {
                 );
                 pages[index].clone()
             }
-            None => {
-                ensure!(!file.exists(), "New page already exists");
-                Page {
-                    path: update.path.clone(),
-                    meta: Meta {
-                        id: update.id.clone(),
-                        summary: update.summary.clone(),
-                        updated: request.date.clone(),
-                        aliases: Vec::new(),
-                        scope: Vec::new(),
-                        resume: None,
-                    },
-                    entries: Vec::new(),
-                }
-            }
+            None => Page {
+                path: update.path.clone(),
+                meta: Meta {
+                    id: update.id.clone(),
+                    summary: update
+                        .summary
+                        .clone()
+                        .context("New pages require a summary")?,
+                    updated: request.date.clone(),
+                    aliases: Vec::new(),
+                    scope: Vec::new(),
+                    resume: None,
+                    handoff: None,
+                },
+                entries: Vec::new(),
+            },
         };
-        page.meta.summary.clone_from(&update.summary);
-        page.meta.updated.clone_from(&request.date);
+        let previous = page.clone();
+        if let Some(summary) = &update.summary {
+            page.meta.summary.clone_from(summary);
+        }
         if let Some(aliases) = &update.aliases {
             page.meta.aliases.clone_from(aliases);
         }
         if let Some(scope) = &update.scope {
             page.meta.scope.clone_from(scope);
         }
-        if !update.entries.is_empty() {
-            page.meta.resume = None;
-        }
-        if let Some(resume) = &update.resume {
-            let (path, anchor) = split_link(resume)?;
-            ensure!(
-                path == request.path,
-                "A refreshed handoff must reference this new source record"
-            );
-            page.meta.resume = Some(evidence(root, &Source { path, anchor }, &overlay)?);
-            refreshed.insert(page.path.clone());
-        }
+        let mut entry_ids = BTreeSet::new();
         for entry in &update.entries {
             ensure!(
-                !page.entries.iter().any(|old| old.id == entry.id),
-                "Existing entries cannot be rewritten: {}#{}",
-                page.meta.id,
+                entry_ids.insert(&entry.id),
+                "Duplicate entry update: {}",
                 entry.id
             );
-            let evidence = entry
-                .evidence
-                .iter()
-                .map(|source| evidence(root, source, &overlay))
-                .collect::<Result<Vec<_>>>()?;
-            page.entries.push(Entry {
+            ensure!(
+                !update.remove.contains(&entry.id),
+                "Entry cannot be updated and removed: {}",
+                entry.id
+            );
+            supplied.insert(format!("{}#{}", page.meta.id, entry.id));
+            let candidate = Entry {
                 id: entry.id.clone(),
                 basis: entry.basis,
                 status: Status::Active,
                 as_of: entry.as_of.clone(),
-                text: entry.text.clone(),
-                evidence,
+                text: entry.text.trim().to_owned(),
+                evidence: entry
+                    .evidence
+                    .iter()
+                    .map(|source| evidence(root, source, &overlay))
+                    .collect::<Result<_>>()?,
                 depends_on: entry.depends_on.clone(),
                 supersedes: entry.supersedes.clone(),
                 review_after: entry.review_after.clone(),
-            });
+            };
+            if let Some(old) = page.entries.iter_mut().find(|old| old.id == entry.id) {
+                if *old != candidate {
+                    revised.insert(format!("{}#{}", page.meta.id, entry.id));
+                    *old = candidate;
+                }
+            } else {
+                page.entries.push(candidate);
+            }
         }
-        changed.insert(page.path.clone());
+        for id in &update.remove {
+            ensure!(model::valid_id(id), "Invalid removed entry ID: {id}");
+            if page.entries.iter().any(|entry| entry.id == *id) {
+                revised.insert(format!("{}#{id}", page.meta.id));
+                page.entries.retain(|entry| entry.id != *id);
+            }
+        }
+        if revised
+            .iter()
+            .any(|reference| reference.starts_with(&format!("{}#", page.meta.id)))
+        {
+            page.meta.resume = None;
+            page.meta.handoff = None;
+        }
+        ensure!(
+            update.resume.is_none() || update.handoff.is_none(),
+            "Choose resume or handoff, not both"
+        );
+        if let Some(resume) = &update.resume {
+            page.meta.resume = if resume.trim().is_empty() {
+                None
+            } else {
+                let (path, anchor) = split_link(resume)?;
+                Some(evidence(root, &Source { path, anchor }, &overlay)?)
+            };
+            page.meta.handoff = None;
+            refreshed.insert(page.path.clone());
+        }
+        if let Some(handoff) = &update.handoff {
+            page.meta.handoff = (!handoff.trim().is_empty()).then(|| handoff.trim().to_owned());
+            page.meta.resume = None;
+            refreshed.insert(page.path.clone());
+        }
+        if page != previous || index.is_none() {
+            page.meta.updated.clone_from(&request.date);
+            changed.insert(page.path.clone());
+        }
         if let Some(index) = index {
             pages[index] = page;
         } else {
             pages.push(page);
         }
+    }
+    // In-place corrections retire conclusions built on the prior version.
+    let dependents: Vec<_> = pages
+        .iter()
+        .flat_map(|page| {
+            page.entries
+                .iter()
+                .filter(|entry| {
+                    entry.status == Status::Active
+                        && !supplied.contains(&model::entry_ref(page, entry))
+                        && entry
+                            .depends_on
+                            .iter()
+                            .any(|target| revised.contains(target))
+                })
+                .map(|entry| model::entry_ref(page, entry))
+        })
+        .collect();
+    for reference in dependents {
+        set_status(
+            &mut pages,
+            &reference,
+            Status::Review,
+            &request.date,
+            &mut changed,
+            &refreshed,
+        )?;
     }
     let replacements = request
         .pages
@@ -263,7 +309,6 @@ pub fn apply(root: &Path, request: &Request, dry_run: bool) -> Result<Output> {
             &refreshed,
         )?;
     }
-    // Each iteration retires at least one active dependent; propagation is finite.
     loop {
         for page in &pages {
             if changed.contains(&page.path) {
@@ -276,7 +321,7 @@ pub fn apply(root: &Path, request: &Request, dry_run: bool) -> Result<Output> {
             "Memory validation failed:\n{}",
             report.errors.join("\n")
         );
-        let review: Vec<String> = pages
+        let review: Vec<_> = pages
             .iter()
             .flat_map(|page| {
                 page.entries
@@ -304,8 +349,7 @@ pub fn apply(root: &Path, request: &Request, dry_run: bool) -> Result<Output> {
         }
     }
     let mut changes = Vec::new();
-    // Publish sources before their pages; readers are excluded until completion.
-    for path in std::iter::once(&request.path).chain(changed.iter()) {
+    for path in source.iter().map(|(path, _)| path).chain(changed.iter()) {
         let after = overlay
             .get(path)
             .context("Missing candidate content")?
@@ -323,12 +367,55 @@ pub fn apply(root: &Path, request: &Request, dry_run: bool) -> Result<Output> {
             });
         }
     }
-    let output = Output {
-        id: request.id.clone(),
-        changed: changes.iter().map(|change| change.path.clone()).collect(),
-        already_recorded: false,
+    finish(root, request, changes, dry_run)
+}
+
+fn source_record(root: &Path, request: &Request) -> Result<Option<(String, String)>> {
+    let (path, body) = match (&request.path, &request.body) {
+        (None, None) => return Ok(None),
+        (Some(path), Some(body)) => (path, body),
+        _ => anyhow::bail!("Source path and body must be provided together"),
     };
-    if !dry_run {
+    ensure!(
+        store::record_path(path),
+        "Records must be Markdown files under corpus/.../records/"
+    );
+    let file = store::writable_path(root, path)?;
+    ensure!(
+        file.file_stem().and_then(|name| name.to_str()) == Some(request.id.as_str()),
+        "Record filename must match its id"
+    );
+    ensure!(!body.trim().is_empty(), "Record body is empty");
+    let header = Header {
+        record_id: request.id.clone(),
+        date: request.date.clone(),
+    };
+    let text = format!(
+        "---\n{}---\n\n{}\n",
+        serde_yaml_ng::to_string(&header)?,
+        body.trim_end()
+    );
+    ensure!(
+        text.len() <= store::MAX_FILE_BYTES,
+        "Source record exceeds 1 MiB"
+    );
+    Ok(Some((path.clone(), text)))
+}
+
+fn output(request: &Request, changes: Vec<String>) -> Output {
+    Output {
+        id: request.id.clone(),
+        already_recorded: changes.is_empty(),
+        changed: changes,
+    }
+}
+
+fn finish(root: &Path, request: &Request, changes: Vec<Change>, dry_run: bool) -> Result<Output> {
+    let output = output(
+        request,
+        changes.iter().map(|change| change.path.clone()).collect(),
+    );
+    if !dry_run && !changes.is_empty() {
         publish(
             root,
             &Journal {
@@ -341,17 +428,60 @@ pub fn apply(root: &Path, request: &Request, dry_run: bool) -> Result<Output> {
 }
 
 fn verify_replay(request: &Request, pages: &[Page]) -> Result<()> {
+    let changed = "Source replay differs from current memory; use a memory-only request";
     for update in &request.pages {
         let page = pages
             .iter()
             .find(|page| page.path == update.path && page.meta.id == update.id)
-            .context("Recorded page is missing; inspect memory before retrying")?;
+            .context(changed)?;
+        ensure!(
+            update
+                .summary
+                .as_ref()
+                .is_none_or(|summary| *summary == page.meta.summary)
+                && update
+                    .aliases
+                    .as_ref()
+                    .is_none_or(|aliases| *aliases == page.meta.aliases)
+                && update
+                    .scope
+                    .as_ref()
+                    .is_none_or(|scope| *scope == page.meta.scope)
+                && update
+                    .remove
+                    .iter()
+                    .all(|id| !page.entries.iter().any(|entry| entry.id == *id)),
+            "{changed}"
+        );
+        ensure!(
+            update.resume.is_none() || update.handoff.is_none(),
+            "Choose resume or handoff, not both"
+        );
+        if let Some(resume) = &update.resume {
+            let expected = if resume.trim().is_empty() {
+                None
+            } else {
+                let (path, anchor) = split_link(resume)?;
+                Some(Evidence { path, anchor })
+            };
+            ensure!(
+                page.meta.resume == expected && page.meta.handoff.is_none(),
+                "{changed}"
+            );
+        }
+        if let Some(handoff) = &update.handoff {
+            let expected = (!handoff.trim().is_empty()).then_some(handoff.trim());
+            ensure!(
+                page.meta.handoff.as_deref() == expected && page.meta.resume.is_none(),
+                "{changed}"
+            );
+        }
         for expected in &update.entries {
             let entry = page
                 .entries
                 .iter()
                 .find(|entry| entry.id == expected.id)
-                .context("Recorded entry is missing; inspect memory before retrying")?;
+                .context(changed)?;
             ensure!(
                 entry.text == expected.text.trim()
                     && entry.basis == expected.basis
@@ -367,9 +497,17 @@ fn verify_replay(request: &Request, pages: &[Page]) -> Result<()> {
                         .all(|(actual, source)| {
                             actual.path == source.path && actual.anchor == source.anchor
                         }),
-                "Recorded entry changed outside the record lifecycle"
+                "{changed}"
             );
         }
+    }
+    for target in &request.retracts {
+        let retracted = pages.iter().any(|page| {
+            page.entries.iter().any(|entry| {
+                model::entry_ref(page, entry) == *target && entry.status == Status::Retracted
+            })
+        });
+        ensure!(retracted, "{changed}");
     }
     Ok(())
 }
@@ -429,6 +567,7 @@ fn set_status(
         page.meta.updated = date.to_owned();
         if !refreshed.contains(&page.path) {
             page.meta.resume = None;
+            page.meta.handoff = None;
         }
         changed.insert(page.path.clone());
     }

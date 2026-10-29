@@ -193,8 +193,16 @@ pub fn inspect(root: &Path, overlay: &Overlay) -> Result<Inspection> {
         if !valid_date(&page.meta.updated) {
             report.error(id, "invalid updated date");
         }
-        if page.entries.is_empty() {
-            report.error(id, "memory page requires at least one entry");
+        if let Some(handoff) = &page.meta.handoff
+            && (!page.path.starts_with("noema/work/") || handoff.trim().is_empty())
+        {
+            report.error(id, "handoff requires a work page and nonempty text");
+        }
+        if page.entries.is_empty()
+            && !(page.path.starts_with("noema/work/")
+                && (page.meta.handoff.is_some() || page.meta.resume.is_some()))
+        {
+            report.error(id, "memory page requires an entry or work handoff");
         }
         let mut aliases = BTreeSet::new();
         for alias in &page.meta.aliases {
@@ -326,6 +334,7 @@ mod tests {
                 aliases: vec![],
                 scope: vec![],
                 resume: None,
+                handoff: None,
             },
             entries: vec![Entry {
                 id: "concise".into(),

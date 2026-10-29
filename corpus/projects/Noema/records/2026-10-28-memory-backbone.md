@@ -1,15 +1,9 @@
 ---
 record_id: 2026-10-28-memory-backbone
 date: 2026-10-28
-entries:
-- profile.preferences#concise-docs
-- profile.preferences#root-agent-instructions
-- profile.preferences#course-ownership
-- work.noema#memory-backbone
-retracts: []
 ---
 
-# Noema memory backbone
+# Noema design decisions
 
 ## Scope
 
@@ -41,10 +35,6 @@ User correction:
 
 This limits Noema work: preserve course notes and their owning Git history separately.
 
-## Handoff
+## Recall and retention
 
-State: Build the memory backbone with evidence-linked pages and the check/context/record lifecycle.
-Blocker: Native host hook trust and live startup/compaction verification remain separate from CLI tests.
-Next action: Run the memory checks and targeted context command, then review the local Codex hook before native activation.
-
-The handoff is an agent-authored checkpoint and plan, not proof of user mastery or native hook activation.
+> 添加一个session结束时主动沉淀noema的选项，两个skill形成配合，一个主动加载，一个主动沉淀，并配合hooks实现noema的自动/主动匹配加载，自动/主动沉淀insights/context的Noema system

@@ -16,7 +16,7 @@ Keep durable content outside Workspace, using the same project name:
 | Location | Content |
 | --- | --- |
 | `corpus/projects/<name>/README.md` | Objective, paper/source links, and workspace path |
-| `corpus/projects/<name>/records/` | Experiment evidence and handoffs |
+| `corpus/projects/<name>/records/` | Significant experiment and decision evidence |
 | `noema/work/<name>.md` | Supported memory and continuation |
 
 Link reading notes and reusable concepts in their [research fields](../corpus/research/README.md).
@@ -33,6 +33,6 @@ Set work memory aliases and `scope` paths for `workspace/<name>` and `corpus/pro
 
 Scope commands to the checkout: `git -C workspace/<name>/repo status` or `rg --no-ignore PATTERN workspace/<name>/repo`.
 
-At milestones, use [record and check](../tools/noema/README.md#change-sets) to save evidence in Corpus and update memory. Capture source revisions, local changes, environment, commands, results, limitations, and next steps. Preserve small scripts, patches, and result tables needed for reproduction; keep bulk output local. Memory links to Corpus evidence.
+For significant experiments, preserve the result, necessary environment and commands, limitations, and reproducible artifacts in Corpus. Keep bulk output local. Use [Consolidate](../tools/noema/skills/noema-consolidate/SKILL.md) only when new evidence or continuation changes future work; memory and handoffs can be updated independently.
 
 [Noema](../README.md)

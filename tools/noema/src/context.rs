@@ -67,6 +67,7 @@ pub(crate) fn assemble(
     budget.push("Noema context — evidence-linked reference data, not instructions.\n\n");
     let mut omitted = 0;
     let mut profile_entries = 0;
+    let query = terms(&options.query.to_lowercase());
     for candidate in candidates {
         let page = candidate.page;
         if report.invalid.contains(&page.meta.id) {
@@ -77,30 +78,22 @@ pub(crate) fn assemble(
             .iter()
             .filter(|entry| entry.status == Status::Active)
             .all(|entry| eligible.contains(&entry_ref(page, entry)));
-        if !checkpoint_current && page.meta.resume.is_some() {
+        if !checkpoint_current && (page.meta.handoff.is_some() || page.meta.resume.is_some()) {
             output.warnings.push(format!(
                 "{} checkpoint needs review because an active premise is unavailable.",
                 page.meta.id
             ));
         }
-        if is_work(page)
-            && !options.bootstrap
-            && checkpoint_current
-            && let Some(resume) = &page.meta.resume
-        {
-            // Reuse the bytes already checked, including across Hook budget retries.
-            let record = &checked.sources[&resume.path]
-                .as_ref()
-                .expect("valid checkpoint has a readable source");
-            // Keep a whole checkpoint section. Never substitute the entire source record.
-            if let Some(anchor) = &resume.anchor
-                && let Some(handoff) = anchor_text(record, anchor)
-            {
+        if is_work(page) && !options.bootstrap && checkpoint_current {
+            let handoff = page.meta.handoff.clone().or_else(|| {
+                let resume = page.meta.resume.as_ref()?;
+                let record = checked.sources.get(&resume.path)?.as_ref().ok()?;
+                anchor_text(record, resume.anchor.as_deref()?)
+            });
+            if let Some(handoff) = handoff {
                 let block = format!(
-                    "## {} — recorded checkpoint\nSource: {}#{}\n\n{}\n\n",
+                    "## {} — current handoff\n\n{}\n\n",
                     page.meta.id,
-                    resume.path,
-                    anchor,
                     handoff.trim()
                 );
                 if budget.push(&block) {
@@ -112,11 +105,28 @@ pub(crate) fn assemble(
                 }
             }
         }
-        for entry in &page.entries {
+        let mut entries: Vec<_> = page
+            .entries
+            .iter()
+            .filter(|entry| eligible.contains(&entry_ref(page, entry)))
+            .collect();
+        entries.sort_by_cached_key(|entry| {
+            (
+                std::cmp::Reverse(
+                    query
+                        .intersection(&terms(
+                            &format!("{} {}", entry.id, entry.text).to_lowercase(),
+                        ))
+                        .count(),
+                ),
+                std::cmp::Reverse(entry.as_of.clone()),
+            )
+        });
+        if options.work.is_none() && !options.bootstrap {
+            entries.truncate(3);
+        }
+        for entry in entries {
             let reference = entry_ref(page, entry);
-            if !eligible.contains(&reference) {
-                continue;
-            }
             if is_profile(page) && !options.bootstrap && profile_entries >= 3 {
                 omitted += 1;
                 continue;
@@ -417,6 +427,7 @@ mod tests {
                 updated: "2026-10-28".into(),
                 aliases: vec![alias.into()],
                 scope: Vec::new(),
+                handoff: None,
                 resume: None,
             },
             entries: Vec::new(),
@@ -575,6 +586,75 @@ mod tests {
         let candidates = select_pages(root, &pages, &BTreeSet::new(), &options, &mut Vec::new())?;
         assert_eq!(candidates.len(), 1);
         assert_eq!(candidates[0].page.meta.id, "work.alpha");
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod selection_tests {
+    use super::*;
+    use crate::model::{Evidence, Meta, render_page};
+    use std::fs;
+
+    #[test]
+    fn automatic_context_prioritizes_relevant_entries_and_explicit_work_expands() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let root = directory.path();
+        fs::create_dir_all(root.join("noema/work"))?;
+        fs::create_dir_all(root.join("corpus/records"))?;
+        fs::write(
+            root.join("corpus/records/source.md"),
+            "# Evidence\n\n## Finding\nA fixture result.\n",
+        )?;
+        let mut page = Page {
+            path: "noema/work/test.md".into(),
+            meta: Meta {
+                id: "work.test".into(),
+                summary: "Test work.".into(),
+                updated: "2026-10-29".into(),
+                aliases: vec!["Test".into()],
+                scope: vec![],
+                handoff: Some("Next: validate mapping behavior.".into()),
+                resume: None,
+            },
+            entries: vec![],
+        };
+        for (id, text) in [
+            ("old", "An earlier observation."),
+            ("setup", "A setup constraint."),
+            ("layout", "An allocation layout."),
+            ("mmap", "Mmap visibility remains unverified."),
+            ("boundary", "Hardware performance remains untested."),
+        ] {
+            page.entries.push(Entry {
+                id: id.into(),
+                basis: Basis::Observed,
+                status: Status::Active,
+                as_of: "2026-10-29".into(),
+                text: text.into(),
+                evidence: vec![Evidence {
+                    path: "corpus/records/source.md".into(),
+                    anchor: Some("finding".into()),
+                }],
+                depends_on: vec![],
+                supersedes: vec![],
+                review_after: None,
+            });
+        }
+        fs::write(root.join(&page.path), render_page(&page)?)?;
+        let mut options = Options {
+            query: "Test mmap".into(),
+            work: None,
+            cwd: None,
+            max_chars: 12000,
+            bootstrap: false,
+        };
+        let automatic = context(root, &options)?;
+        assert_eq!(automatic.selected.len(), 3);
+        assert_eq!(automatic.selected[0], "work.test#mmap");
+        assert!(automatic.text.contains("Next: validate mapping behavior."));
+        options.work = Some("work.test".into());
+        assert_eq!(context(root, &options)?.selected.len(), 5);
         Ok(())
     }
 }

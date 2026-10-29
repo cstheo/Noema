@@ -1,9 +1,7 @@
 # Insights
 
-Evidence-linked conclusions connecting tasks, projects, or research areas.
+Supported, non-obvious conclusions that change decisions across tasks or research areas.
 
-- [Agent lifecycle](agent-lifecycle.md)
-
-Technical explanations and paper notes stay in Corpus; create insight pages when supported.
+Technical explanations belong in Corpus. Add a page when a useful conclusion emerges.
 
 [Noema](../README.md)

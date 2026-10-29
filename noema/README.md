@@ -1,40 +1,32 @@
 # Noema
 
-Evidence-linked memory for personal context, work continuity, and reusable insights.
+Evidence-linked memory that improves future work.
 
-- [Profile](profile/README.md): background, preferences, and long-term goals.
-- [Work](work/README.md): decisions, findings, and continuation.
-- [Insights](insights/README.md): conclusions connecting tasks and sources.
+- [Profile](profile/README.md): personal background and lasting preferences.
+- [Work](work/README.md): current goals, decisions, constraints, and continuation.
+- [Insights](insights/README.md): supported conclusions connecting tasks or research.
 
-Corpus preserves original evidence. Each memory has one home; context is assembled per task.
+Corpus owns original evidence and technical notes. Keep one primary home; link rather than duplicate. Routine activity and implementation history stay out of memory.
 
 ## Pages
 
-YAML frontmatter contains stable `id`, topic-only `summary`, and `updated`. Optional fields are `aliases`, repository-relative `scope`, and `resume` evidence. README files provide navigation only.
+YAML frontmatter contains stable `id`, topic-only `summary`, and `updated`. Optional fields are `aliases`, repository-relative `scope`, and a concise `handoff` string. A work page can contain only a handoff. `resume` may instead point to a Corpus path and section.
 
-Each `## entry-id` contains one independently revisable statement:
+Each `## entry-id` contains one revisable statement:
 
 ```markdown
 - Basis: explicit
 - Status: active
 - As of: YYYY-MM-DD
-- Evidence: [source](<relative/path/to/record.md#request>)
+- Evidence: [source](<relative/path/to/evidence.md#section>)
 
 One supported statement.
 ```
 
-Repeat Evidence links for multiple sources. Optional fields are `Depends on`, `Supersedes`, and `Review after`; references use `page.id#entry-id`. Reserve `##` for entries.
+Basis is `explicit`, `observed`, or `inferred`. Inferences require `Depends on` references; optional fields are `Supersedes` and `Review after`. Entry references use `page.id#entry-id`.
 
-- Basis: `explicit` user statement, `observed` result, or `inferred` conclusion with dependencies.
-- Status: `active`, `review`, `superseded`, or `retracted`.
-- `As of` dates the claim; `updated` dates the edit. Review deadlines use UTC dates.
+Status is `active`, `review`, `superseded`, or `retracted`. `As of` dates a claim; `updated` dates an edit. Revise current entries and remove obsolete detail; Git retains history. Corrections suspend dependent conclusions until reviewed.
 
-Evidence stores a repository-relative path and optional anchor. Git tracks revisions; source edits alone do not change claim status. Binary sources need a text evidence record. Corrections preserve history and suspend dependent claims. Validation checks links and consistency, not truth or mastery.
+Evidence links to Corpus text through a path and optional anchor. Validation checks structure, links, and dependencies. It does not establish truth, progress, or mastery.
 
-A handoff requires valid active premises. Context reuses checked source text.
-
-## Lifecycle
-
-[Recall](../tools/noema/skills/noema-recall/SKILL.md) selects task context. [Consolidate](../tools/noema/skills/noema-consolidate/SKILL.md) preserves durable changes and work handoffs through `resume`.
-
-See the [CLI and record protocol](../tools/noema/README.md), [Hook lifecycle](../tools/noema/README.md#automatic-loading), and [automatic/manual controls](../tools/noema/README.md#consolidation).
+[Recall](../tools/noema/skills/noema-recall/SKILL.md) selects relevant context. [Consolidate](../tools/noema/skills/noema-consolidate/SKILL.md) decides whether any new information deserves saving. Records, memory, and handoffs can be updated independently through the [write protocol](../tools/noema/README.md#change-sets).

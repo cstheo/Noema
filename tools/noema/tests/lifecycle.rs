@@ -262,8 +262,7 @@ fn independent_sessions_resume_then_propagate_corrections() -> Result<()> {
     assert_eq!(check["errors"], json!([]));
 
     let before = memory_and_sources(fixture.root())?;
-    let replay = fixture.record(&seed)?;
-    assert_eq!(replay["already_recorded"], json!(true));
+    fixture.reject_record(&seed)?;
     assert_eq!(before, memory_and_sources(fixture.root())?);
     assert!(text(&fixture.context()?)?.contains(NEW));
     Ok(())
@@ -316,6 +315,74 @@ fn replay_rejects_modified_deadlines_and_evidence_pointers() -> Result<()> {
         fs::write(path, changed)?;
         fixture.reject_record(&seed)?;
     }
+    Ok(())
+}
+
+#[test]
+fn source_replay_rejects_new_retractions_without_page_updates() -> Result<()> {
+    let fixture = Fixture::new()?;
+    fixture.seed()?;
+    let mut request = json!({
+        "id": "observation", "date": "2026-10-28",
+        "path": "corpus/projects/Test/records/observation.md",
+        "body": "An independent observation."
+    });
+    fixture.record(&request)?;
+    request["retracts"] = json!(["work.test#mode"]);
+    let output = fixture.reject_record(&request)?;
+    assert!(String::from_utf8_lossy(&output.stderr).contains("memory-only request"));
+    Ok(())
+}
+
+#[test]
+fn source_replay_rejects_changed_page_intent() -> Result<()> {
+    for field in ["summary", "aliases", "scope", "resume", "handoff", "remove"] {
+        let fixture = Fixture::new()?;
+        let mut request = fixture.seed()?;
+        request["pages"][0][field] = match field {
+            "summary" => json!("A changed summary."),
+            "aliases" => json!(["Changed alias"]),
+            "scope" => json!([]),
+            "resume" => json!(format!("{SOURCE}#request")),
+            "handoff" => {
+                request["pages"][0]
+                    .as_object_mut()
+                    .context("page update")?
+                    .remove("resume");
+                json!("Next: a different continuation.")
+            }
+            "remove" => json!(["transitive"]),
+            _ => unreachable!(),
+        };
+        let output = fixture.reject_record(&request)?;
+        assert!(String::from_utf8_lossy(&output.stderr).contains("memory-only request"));
+    }
+    Ok(())
+}
+
+#[test]
+fn source_replay_accepts_already_applied_retractions_and_page_updates() -> Result<()> {
+    let fixture = Fixture::new()?;
+    fixture.seed()?;
+    let request = json!({
+        "id": "checkpoint", "date": "2026-10-29",
+        "path": "corpus/projects/Test/records/checkpoint.md",
+        "body": "A significant checkpoint.",
+        "pages": [{
+            "path": PAGE, "id": "work.test",
+            "summary": "Current Test Work decisions.",
+            "aliases": ["Current Test"], "scope": [],
+            "handoff": "Next: validate the reader.", "remove": ["transitive"]
+        }],
+        "retracts": ["profile.preferences#brevity"]
+    });
+    fixture.record(&request)?;
+    let before = memory_and_sources(fixture.root())?;
+    let replay = fixture.record(&request)?;
+    assert_eq!(replay["already_recorded"], json!(true));
+    assert_eq!(replay["changed"], json!([]));
+    assert_eq!(before, memory_and_sources(fixture.root())?);
+    assert!(!fixture.root().join(".local/noema/pending.json").exists());
     Ok(())
 }
 
@@ -703,5 +770,205 @@ fn independent_appends_preserve_current_entries() -> Result<()> {
     ] {
         assert!(selected.contains(&json!(format!("work.test#{id}"))), "{id}");
     }
+    Ok(())
+}
+
+#[test]
+fn a_source_record_does_not_require_memory() -> Result<()> {
+    let fixture = Fixture::new()?;
+    let request = json!({
+        "id": "experiment", "date": "2026-10-29",
+        "path": "corpus/projects/Test/records/experiment.md",
+        "body": "# Experiment\n\n## Result\nThe run exposed a failure.\n"
+    });
+    let output = fixture.record(&request)?;
+    assert_eq!(
+        output["changed"],
+        json!(["corpus/projects/Test/records/experiment.md"])
+    );
+    assert!(!fixture.root().join(PAGE).exists());
+    assert_eq!(fixture.record(&request)?["already_recorded"], true);
+    Ok(())
+}
+
+#[test]
+fn memory_and_handoff_use_existing_evidence_without_new_records() -> Result<()> {
+    let fixture = Fixture::new()?;
+    fixture.record(&json!({
+        "id": "original", "date": "2026-10-29",
+        "path": "corpus/projects/Test/records/original.md",
+        "body": "# User statement\n\n## Request\nKeep one current decision.\n\n## Handoff\nNext: inspect the reader.\n"
+    }))?;
+    let sources = fs::read(
+        fixture
+            .root()
+            .join("corpus/projects/Test/records/original.md"),
+    )?;
+    let update = json!({
+        "id": "remember", "date": "2026-10-29",
+        "pages": [{"path": PAGE, "id": "work.test", "summary": "Current Test work.",
+            "entries": [entry("decision", "explicit", "Keep one current decision.", "corpus/projects/Test/records/original.md")]}]
+    });
+    fixture.record(&update)?;
+    fixture.record(&json!({
+        "id": "handoff", "date": "2026-10-29",
+        "pages": [{"path": PAGE, "id": "work.test", "resume": "corpus/projects/Test/records/original.md#handoff"}]
+    }))?;
+    assert!(text(&fixture.context()?)?.contains("Next: inspect the reader."));
+    fixture.record(&json!({
+        "id": "next", "date": "2026-10-29",
+        "pages": [{"path": PAGE, "id": "work.test", "handoff": "Next: run the focused reproduction."}]
+    }))?;
+    let page = fs::read_to_string(fixture.root().join(PAGE))?;
+    assert!(page.contains("Keep one current decision."));
+    assert!(!page.contains("resume:"));
+    fixture.record(&json!({
+        "id": "clear-next", "date": "2026-10-29",
+        "pages": [{"path": PAGE, "id": "work.test", "handoff": ""}]
+    }))?;
+    assert!(!fs::read_to_string(fixture.root().join(PAGE))?.contains("handoff:"));
+    assert_eq!(
+        fs::read_dir(fixture.root().join("corpus/projects/Test/records"))?.count(),
+        1
+    );
+    assert_eq!(
+        fs::read(
+            fixture
+                .root()
+                .join("corpus/projects/Test/records/original.md")
+        )?,
+        sources
+    );
+    Ok(())
+}
+
+#[test]
+fn a_handoff_can_start_work_without_inventing_a_memory_claim() -> Result<()> {
+    let fixture = Fixture::new()?;
+    let update = json!({
+        "id": "continue", "date": "2026-10-29",
+        "pages": [{"path": PAGE, "id": "work.test", "summary": "Current Test work.",
+            "handoff": "Next: inspect the existing experiment output."}]
+    });
+    fixture.record(&update)?;
+    let page = fs::read_to_string(fixture.root().join(PAGE))?;
+    assert!(!page.contains("- Basis:"));
+    assert_eq!(
+        fs::read_dir(fixture.root().join("corpus/projects/Test/records"))?.count(),
+        0
+    );
+    assert!(fixture.run(&["check", "--json"])?.status.success());
+    Ok(())
+}
+
+#[test]
+fn revising_current_memory_suspends_derived_claims_without_a_history_chain() -> Result<()> {
+    let fixture = Fixture::new()?;
+    fixture.seed()?;
+    let old_source = fs::read(fixture.root().join(SOURCE))?;
+    fixture.record(&json!({
+        "id": "correction", "date": "2026-10-29",
+        "path": "corpus/projects/Test/records/correction.md",
+        "body": "# User correction\n\n## Request\nThe current mode is beta.\n"
+    }))?;
+    fixture.record(&json!({
+        "id": "refresh", "date": "2026-10-29",
+        "pages": [{"path": PAGE, "id": "work.test",
+            "entries": [entry("mode", "explicit", NEW, "corpus/projects/Test/records/correction.md")]}]
+    }))?;
+    let page = fs::read_to_string(fixture.root().join(PAGE))?;
+    assert!(!page.contains(OLD));
+    assert!(!page.contains("- Supersedes:"));
+    assert!(!page.contains("resume:"));
+    assert_eq!(page.matches("- Status: review").count(), 2);
+    assert!(text(&fixture.context()?)?.contains(NEW));
+    assert!(!text(&fixture.context()?)?.contains(DEPENDENT));
+    assert_eq!(fs::read(fixture.root().join(SOURCE))?, old_source);
+    fixture.record(&json!({
+        "id": "prune", "date": "2026-10-29",
+        "pages": [{"path": PAGE, "id": "work.test", "remove": ["dependent", "transitive"]}]
+    }))?;
+    assert_eq!(
+        fs::read_to_string(fixture.root().join(PAGE))?
+            .matches("## ")
+            .count(),
+        1
+    );
+    assert!(fixture.run(&["check", "--json"])?.status.success());
+    Ok(())
+}
+
+#[test]
+fn unchanged_memory_does_not_refresh_dates_or_publish_a_journal() -> Result<()> {
+    let fixture = Fixture::new()?;
+    fixture.seed()?;
+    let before = memory_and_sources(fixture.root())?;
+    let modified = fs::metadata(fixture.root().join(PAGE))?.modified()?;
+    let output = fixture.record(&json!({
+        "id": "no-change", "date": "2026-10-29",
+        "pages": [{"path": PAGE, "id": "work.test", "entries": [entry("mode", "observed", OLD, SOURCE)]}]
+    }))?;
+    assert_eq!(output["changed"], json!([]));
+    assert_eq!(output["already_recorded"], true);
+    assert_eq!(memory_and_sources(fixture.root())?, before);
+    assert_eq!(
+        fs::metadata(fixture.root().join(PAGE))?.modified()?,
+        modified
+    );
+    assert!(!fixture.root().join(".local/noema/pending.json").exists());
+    Ok(())
+}
+
+#[test]
+fn a_new_experiment_record_is_independent_of_invalid_memory() -> Result<()> {
+    let fixture = Fixture::new()?;
+    fs::write(
+        fixture.root().join(PAGE),
+        "An unrelated unfinished memory edit.",
+    )?;
+    let request = json!({
+        "id": "experiment", "date": "2026-10-29",
+        "path": "corpus/projects/Test/records/experiment.md",
+        "body": "# Experiment\n\n## Result\nThe run exposed a failure.\n"
+    });
+    fixture.record(&request)?;
+    assert_eq!(fixture.record(&request)?["already_recorded"], true);
+    assert_eq!(
+        fs::read_to_string(fixture.root().join(PAGE))?,
+        "An unrelated unfinished memory edit."
+    );
+    Ok(())
+}
+
+#[test]
+fn a_premise_and_its_reviewed_derivation_can_be_refreshed_together() -> Result<()> {
+    let fixture = Fixture::new()?;
+    fixture.seed()?;
+    let source = "corpus/projects/Test/records/beta.md";
+    fixture.record(&json!({
+        "id": "beta", "date": "2026-10-29", "path": source,
+        "body": "# User correction\n\n## Request\nThe current mode is beta.\n"
+    }))?;
+    let mut derived = entry(
+        "dependent",
+        "inferred",
+        "Use the beta-specific recovery path.",
+        source,
+    );
+    derived["depends_on"] = json!(["work.test#mode"]);
+    fixture.record(&json!({
+        "id": "refresh-beta", "date": "2026-10-29",
+        "pages": [{"path": PAGE, "id": "work.test", "entries": [entry("mode", "explicit", NEW, source), derived]}]
+    }))?;
+    let context = fixture.context()?;
+    assert!(text(&context)?.contains(NEW));
+    assert!(text(&context)?.contains("Use the beta-specific recovery path."));
+    assert!(!text(&context)?.contains(TRANSITIVE));
+    assert_eq!(
+        fs::read_to_string(fixture.root().join(PAGE))?
+            .matches("- Status: review")
+            .count(),
+        1
+    );
     Ok(())
 }

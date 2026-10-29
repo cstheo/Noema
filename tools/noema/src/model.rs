@@ -40,6 +40,8 @@ pub struct Meta {
     pub scope: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub resume: Option<Evidence>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub handoff: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -366,6 +368,7 @@ mod tests {
                 aliases: vec!["示例".into()],
                 scope: vec![],
                 resume: None,
+                handoff: None,
             },
             entries: vec![Entry {
                 id: "decision".into(),

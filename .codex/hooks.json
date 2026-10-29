@@ -26,30 +26,6 @@
           }
         ]
       }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"$(git rev-parse --show-toplevel)/tools/target/release/noema-hook\"",
-            "timeout": 3,
-            "statusMessage": "Reviewing Noema memory"
-          }
-        ]
-      }
-    ],
-    "SessionEnd": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"$(git rev-parse --show-toplevel)/tools/target/release/noema-hook\"",
-            "timeout": 3,
-            "statusMessage": "Deferring unfinished Noema reviews"
-          }
-        ]
-      }
     ]
   }
 }

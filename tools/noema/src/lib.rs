@@ -1,7 +1,6 @@
 //! Evidence-linked Markdown memory and a checked record/context lifecycle.
 
 pub mod check;
-pub mod consolidation;
 pub mod context;
 pub mod hooks;
 pub mod model;

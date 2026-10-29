@@ -25,6 +25,6 @@ Corpus and Noema supply task context. Agents invoke Tools, record outcomes in Co
 - Propagate user corrections. Preserve history and mark superseded claims.
 - Select context for the task. Verify precise claims against original sources.
 - Proactively use [Noema Recall](tools/noema/skills/noema-recall/SKILL.md) when local context matters. Reuse checked context; refresh after task changes or context loss.
-- Use [Noema Consolidate](tools/noema/skills/noema-consolidate/SKILL.md) at milestones and session close. Respect its mode; save useful outcomes, corrections, insights, and continuation through `record` and `check`. Skip changes with no durable value.
+- Use [Noema Consolidate](tools/noema/skills/noema-consolidate/SKILL.md) only for significant evidence, lasting corrections or decisions, and essential continuation. Update existing artifacts; routine answers, checks, commits, and session closure need no record.
 - Write system and agent content in English. Preserve source languages.
 - Keep private state and credentials out of tracked source.

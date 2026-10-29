@@ -1,4 +1,4 @@
 interface:
   display_name: "Noema Consolidate"
-  short_description: "Preserve useful outcomes, insights, and handoffs"
-  default_prompt: "Use $noema-consolidate to preserve useful outcomes, supported insights, and a continuation checkpoint from this session."
+  short_description: "Save only evidence and memory with future value"
+  default_prompt: "Use $noema-consolidate to save only new evidence, memory, or continuation that will improve future work; otherwise skip."

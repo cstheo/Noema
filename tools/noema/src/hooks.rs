@@ -1,6 +1,6 @@
-//! Host lifecycle adapter; only private binding and review metadata is writable.
+//! Recall task context; only private session bindings are writable.
 use crate::{
-    check, consolidation,
+    check,
     context::{self, Options},
     lock, require_complete,
     store::{self, Overlay},
@@ -27,29 +27,15 @@ pub enum Event {
         session_id: String,
         #[serde(default)]
         cwd: Option<PathBuf>,
-        #[serde(default)]
-        source: Option<String>,
     },
     UserPromptSubmit {
         session_id: String,
         #[serde(default)]
         cwd: Option<PathBuf>,
         prompt: String,
-        #[serde(default)]
-        turn_id: Option<String>,
-        #[serde(default)]
-        transcript_path: Option<PathBuf>,
     },
-    Stop {
-        session_id: String,
-        turn_id: String,
-        stop_hook_active: bool,
-    },
-    SessionEnd {
-        session_id: String,
-        #[serde(default)]
-        transcript_path: Option<PathBuf>,
-    },
+    Stop,
+    SessionEnd,
 }
 
 #[derive(Debug, Serialize)]
@@ -58,10 +44,6 @@ pub enum HookOutput {
     Context {
         #[serde(rename = "hookSpecificOutput")]
         hook_specific_output: HookContext,
-    },
-    Review {
-        decision: &'static str,
-        reason: String,
     },
     Empty {},
 }
@@ -76,46 +58,20 @@ pub struct HookContext {
 const SESSIONS: &str = ".local/noema/sessions.json";
 
 pub fn run(root: &Path, event: Event) -> Result<HookOutput> {
-    if matches!(
-        &event,
-        Event::Stop {
-            stop_hook_active: true,
-            ..
-        }
-    ) {
-        return Ok(HookOutput::Empty {});
-    }
     let session = match &event {
-        Event::SessionStart { session_id, .. }
-        | Event::UserPromptSubmit { session_id, .. }
-        | Event::Stop { session_id, .. }
-        | Event::SessionEnd { session_id, .. } => session_id,
+        Event::SessionStart { session_id, .. } | Event::UserPromptSubmit { session_id, .. } => {
+            session_id
+        }
+        Event::Stop | Event::SessionEnd => return Ok(HookOutput::Empty {}),
     };
-    consolidation::valid_identifier(session)?;
-    match &event {
-        Event::Stop { turn_id, .. } => {
-            let _state_guard = consolidation::lock_private(root, true)?;
-            return Ok(match consolidation::request_stop(root, session, turn_id)? {
-                Some(reason) => HookOutput::Review {
-                    decision: "block",
-                    reason,
-                },
-                None => HookOutput::Empty {},
-            });
-        }
-        Event::SessionEnd {
-            transcript_path, ..
-        } => {
-            let _state_guard = consolidation::lock_private(root, true)?;
-            consolidation::defer(root, session, transcript_path.as_deref())?;
-            return Ok(HookOutput::Empty {});
-        }
-        _ => {}
-    }
+    ensure!(
+        !session.trim().is_empty()
+            && session.len() <= 1024
+            && !session.chars().any(char::is_control),
+        "Invalid session identifier"
+    );
     let _guard = lock(root, true)?;
     require_complete(root)?;
-    let _state_guard =
-        consolidation::lock_private(root, matches!(&event, Event::UserPromptSubmit { .. }))?;
     let mut bindings =
         store::read_json::<BTreeMap<String, String>>(root, SESSIONS)?.unwrap_or_default();
     let checked = check::inspect(root, &Overlay::new())?;
@@ -140,40 +96,22 @@ pub fn run(root: &Path, event: Event) -> Result<HookOutput> {
             &work_ids,
             budget,
         )?;
-        let lifecycle = match &event {
-            Event::SessionStart { source, .. } => {
-                consolidation::startup_notice(root, session, source.as_deref())?
-            }
-            Event::UserPromptSubmit {
-                turn_id,
-                transcript_path,
-                ..
-            } => {
-                let token = consolidation::register(
-                    root,
-                    session,
-                    turn_id.as_deref(),
-                    transcript_path.as_deref(),
-                    next_work.as_deref(),
-                )?;
-                consolidation::prompt_notice(token.as_deref())
-            }
-            _ => String::new(),
-        };
         let quoted = format!(
-            "{lifecycle}{prefix}{}",
+            "{prefix}{}",
             serde_json::to_string(&json!({"memory_context":text}))?
         );
         if quoted.chars().count() <= MAX_CONTEXT {
-            match next_work {
-                Some(work) => {
-                    bindings.insert(session.clone(), work);
+            if bindings.get(session) != next_work.as_ref() {
+                match next_work {
+                    Some(work) => {
+                        bindings.insert(session.clone(), work);
+                    }
+                    None => {
+                        bindings.remove(session);
+                    }
                 }
-                None => {
-                    bindings.remove(session);
-                }
+                save_bindings(root, &bindings)?;
             }
-            save_bindings(root, &bindings)?;
             return Ok(HookOutput::Context {
                 hook_specific_output: HookContext {
                     hook_event_name: event_name.into(),

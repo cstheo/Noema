@@ -1,8 +1,6 @@
 use anyhow::{Context, Result, ensure};
 use clap::{ArgGroup, Args, Parser, Subcommand};
-use noema_memory::{
-    check, consolidation, context, lock, record, repository, require_complete, store::Overlay,
-};
+use noema_memory::{check, context, lock, record, repository, require_complete, store::Overlay};
 use std::{
     io::{self, Read},
     path::PathBuf,
@@ -42,17 +40,6 @@ enum Command {
     },
     /// Publish a checked JSON change set, or recover an interrupted write.
     Record(Record),
-    /// Configure automatic consolidation review or acknowledge a review token.
-    Consolidation {
-        #[arg(long, value_enum, conflicts_with = "complete")]
-        mode: Option<consolidation::Mode>,
-        #[arg(long, requires = "outcome")]
-        complete: Option<String>,
-        #[arg(long, value_enum, requires = "complete")]
-        outcome: Option<consolidation::Outcome>,
-        #[arg(long)]
-        json: bool,
-    },
 }
 
 #[derive(Args)]
@@ -86,15 +73,7 @@ fn main() -> ExitCode {
 
 fn run(cli: Cli) -> Result<bool> {
     let root = repository(cli.root.as_deref())?;
-    let write = matches!(
-        &cli.command,
-        Command::Record(_)
-            | Command::Consolidation { mode: Some(_), .. }
-            | Command::Consolidation {
-                complete: Some(_),
-                ..
-            }
-    );
+    let write = matches!(&cli.command, Command::Record(_));
     let _lock = lock(&root, write)?;
     match cli.command {
         Command::Check { json } => {
@@ -184,39 +163,6 @@ fn run(cli: Cli) -> Result<bool> {
                     output.id,
                     output.changed.len()
                 );
-            }
-            Ok(true)
-        }
-        Command::Consolidation {
-            mode,
-            complete,
-            outcome,
-            json,
-        } => {
-            let _state_guard =
-                consolidation::lock_private(&root, mode.is_some() || complete.is_some())?;
-            if let Some(mode) = mode {
-                consolidation::set_mode(&root, mode)?;
-            }
-            if let Some(token) = complete {
-                consolidation::complete(&root, &token, outcome.context("Supply an outcome")?)?;
-            }
-            let status = consolidation::status(&root)?;
-            if json {
-                println!("{}", serde_json::to_string_pretty(&status)?);
-            } else {
-                println!(
-                    "{:?} consolidation; {} pending reviews",
-                    status.mode,
-                    status.pending.len()
-                );
-                for review in status.pending {
-                    println!(
-                        "{}{}",
-                        review.token,
-                        if review.deferred { " (deferred)" } else { "" }
-                    );
-                }
             }
             Ok(true)
         }
