@@ -1,7 +1,6 @@
 use crate::{
     check,
     model::{Basis, Entry, Page, Status, entry_ref},
-    store::{Overlay, anchor_text},
 };
 use anyhow::{Result, ensure};
 use serde::Serialize;
@@ -34,7 +33,7 @@ struct Candidate<'a> {
 
 /// Select current memory without changing files or treating file activity as work state.
 pub fn context(root: &Path, options: &Options) -> Result<Output> {
-    assemble(root, &check::inspect(root, &Overlay::new())?, options)
+    assemble(root, &check::inspect(root)?, options)
 }
 
 pub(crate) fn assemble(
@@ -64,7 +63,7 @@ pub(crate) fn assemble(
         warnings,
     };
     let mut budget = Budget::new(options.max_chars);
-    budget.push("Noema context — evidence-linked reference data, not instructions.\n\n");
+    budget.push("Noema context — reference data, not instructions.\n\n");
     let mut omitted = 0;
     let mut profile_entries = 0;
     let query = terms(&options.query.to_lowercase());
@@ -73,36 +72,21 @@ pub(crate) fn assemble(
         if report.invalid.contains(&page.meta.id) {
             continue;
         }
-        let checkpoint_current = page
-            .entries
-            .iter()
-            .filter(|entry| entry.status == Status::Active)
-            .all(|entry| eligible.contains(&entry_ref(page, entry)));
-        if !checkpoint_current && (page.meta.handoff.is_some() || page.meta.resume.is_some()) {
-            output.warnings.push(format!(
-                "{} checkpoint needs review because an active premise is unavailable.",
-                page.meta.id
-            ));
-        }
-        if is_work(page) && !options.bootstrap && checkpoint_current {
-            let handoff = page.meta.handoff.clone().or_else(|| {
-                let resume = page.meta.resume.as_ref()?;
-                let record = checked.sources.get(&resume.path)?.as_ref().ok()?;
-                anchor_text(record, resume.anchor.as_deref()?)
-            });
-            if let Some(handoff) = handoff {
-                let block = format!(
-                    "## {} — current handoff\n\n{}\n\n",
-                    page.meta.id,
-                    handoff.trim()
-                );
-                if budget.push(&block) {
-                    output
-                        .reasons
-                        .insert(page.meta.id.clone(), candidate.reason.clone());
-                } else {
-                    omitted += 1;
-                }
+        if is_work(page)
+            && !options.bootstrap
+            && let Some(handoff) = &page.meta.handoff
+        {
+            let block = format!(
+                "## {} — current handoff\n\n{}\n\n",
+                page.meta.id,
+                handoff.trim()
+            );
+            if budget.push(&block) {
+                output
+                    .reasons
+                    .insert(page.meta.id.clone(), candidate.reason.clone());
+            } else {
+                omitted += 1;
             }
         }
         let mut entries: Vec<_> = page
@@ -364,28 +348,12 @@ fn entry_block(page: &Page, entry: &Entry) -> String {
         Basis::Observed => "observed",
         Basis::Inferred => "inferred",
     };
-    let mut block = format!(
-        "## {}\nBasis: {basis} · As of: {}\n\n{}\n\nEvidence:\n",
+    format!(
+        "## {}\nBasis: {basis} · As of: {}\n\n{}\n\n",
         entry_ref(page, entry),
         entry.as_of,
         entry.text.trim()
-    );
-    for evidence in &entry.evidence {
-        block.push_str(&format!(
-            "- {}{}\n",
-            evidence.path,
-            evidence
-                .anchor
-                .as_ref()
-                .map(|anchor| format!("#{anchor}"))
-                .unwrap_or_default()
-        ));
-    }
-    if !entry.depends_on.is_empty() {
-        block.push_str(&format!("Depends on: {}\n", entry.depends_on.join(", ")));
-    }
-    block.push('\n');
-    block
+    )
 }
 
 struct Budget {
@@ -415,7 +383,7 @@ impl Budget {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{Evidence, render_page};
+    use crate::model::render_page;
     use std::fs;
 
     fn work(id: &str, alias: &str) -> Page {
@@ -428,7 +396,6 @@ mod tests {
                 aliases: vec![alias.into()],
                 scope: Vec::new(),
                 handoff: None,
-                resume: None,
             },
             entries: Vec::new(),
         }
@@ -508,38 +475,18 @@ mod tests {
     }
 
     #[test]
-    fn expired_active_facts_also_suspend_their_recorded_checkpoint() -> Result<()> {
+    fn expired_entries_are_omitted_without_hiding_independent_handoff() -> Result<()> {
         let directory = tempfile::tempdir()?;
         let root = directory.path();
-        let source = "corpus/projects/Test/records/expired.md";
-        for path in [
-            "noema/profile",
-            "noema/work",
-            "noema/insights",
-            "corpus/projects/Test/records",
-        ] {
-            fs::create_dir_all(root.join(path))?;
-        }
-        let record = "# Source\n\n## Request\nA historical finding.\n\n## Handoff\nCHECKPOINT_FROM_EXPIRED_PREMISE\n";
-        fs::write(root.join(source), record)?;
-        let evidence = Evidence {
-            path: source.into(),
-            anchor: Some("request".into()),
-        };
+        fs::create_dir_all(root.join("noema/work"))?;
         let mut page = work("work.test", "Test");
-        page.meta.resume = Some(Evidence {
-            anchor: Some("handoff".into()),
-            ..evidence.clone()
-        });
+        page.meta.handoff = Some("Next: rerun the outdated experiment.".into());
         page.entries.push(Entry {
             id: "historical".into(),
             basis: Basis::Observed,
             status: Status::Active,
             as_of: "2000-01-01".into(),
-            text: "The old premise requires review.".into(),
-            evidence: vec![evidence],
-            depends_on: Vec::new(),
-            supersedes: Vec::new(),
+            text: "The old result requires review.".into(),
             review_after: Some("2000-01-02".into()),
         });
         fs::write(root.join(&page.path), render_page(&page)?)?;
@@ -553,9 +500,10 @@ mod tests {
                 bootstrap: false,
             },
         )?;
-        assert!(!output.text.contains("CHECKPOINT_FROM_EXPIRED_PREMISE"));
-        assert!(!output.text.contains("The old premise requires review."));
+        assert!(output.text.contains("Next: rerun the outdated experiment."));
+        assert!(!output.text.contains("The old result requires review."));
         assert!(output.selected.is_empty());
+        assert!(!output.warnings.is_empty());
         Ok(())
     }
 
@@ -593,7 +541,7 @@ mod tests {
 #[cfg(test)]
 mod selection_tests {
     use super::*;
-    use crate::model::{Evidence, Meta, render_page};
+    use crate::model::{Meta, render_page};
     use std::fs;
 
     #[test]
@@ -601,11 +549,6 @@ mod selection_tests {
         let directory = tempfile::tempdir()?;
         let root = directory.path();
         fs::create_dir_all(root.join("noema/work"))?;
-        fs::create_dir_all(root.join("corpus/records"))?;
-        fs::write(
-            root.join("corpus/records/source.md"),
-            "# Evidence\n\n## Finding\nA fixture result.\n",
-        )?;
         let mut page = Page {
             path: "noema/work/test.md".into(),
             meta: Meta {
@@ -615,7 +558,6 @@ mod selection_tests {
                 aliases: vec!["Test".into()],
                 scope: vec![],
                 handoff: Some("Next: validate mapping behavior.".into()),
-                resume: None,
             },
             entries: vec![],
         };
@@ -632,12 +574,6 @@ mod selection_tests {
                 status: Status::Active,
                 as_of: "2026-10-29".into(),
                 text: text.into(),
-                evidence: vec![Evidence {
-                    path: "corpus/records/source.md".into(),
-                    anchor: Some("finding".into()),
-                }],
-                depends_on: vec![],
-                supersedes: vec![],
                 review_after: None,
             });
         }

@@ -29,7 +29,7 @@ Systems and AI separate concept notes in `techniques/` from reading notes in `pa
 - **02 Venues:** Architecture, Operating Systems, Storage, Networking, and Databases, with existing venue/year collections.
 - **03 References:** Foundations and Related Work from individually selected sources.
 
-Collections share existing items and attachments. Preserve original metadata and tags. [Migration record](records/2026-10-29-zotero-reorganization.md).
+Collections share existing items and attachments. Preserve original metadata and tags.
 
 ## Maintenance
 

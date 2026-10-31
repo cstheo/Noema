@@ -1,4 +1,4 @@
 interface:
   display_name: "Noema Consolidate"
-  short_description: "Save only evidence and memory with future value"
-  default_prompt: "Use $noema-consolidate to save only new evidence, memory, or continuation that will improve future work; otherwise skip."
+  short_description: "Keep useful memory and continuation current"
+  default_prompt: "Use $noema-consolidate to update only memory or continuation that will improve future work; otherwise skip."

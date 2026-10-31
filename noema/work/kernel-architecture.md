@@ -17,7 +17,6 @@ handoff: Continue from the current survey and bibliography when selecting the ne
 - Basis: explicit
 - Status: active
 - As of: 2026-10-26
-- Evidence: [source](<../../corpus/research/system/os/kernel-architecture/records/2026-10-29-research-scope.md#original-research-scope>)
 
 Study kernel architecture through hardware-resource abstraction and management and the organization of services for user programs.
 
@@ -26,6 +25,5 @@ Study kernel architecture through hardware-resource abstraction and management a
 - Basis: explicit
 - Status: active
 - As of: 2026-10-09
-- Evidence: [source](<../../corpus/research/system/os/kernel-architecture/records/2026-10-29-research-scope.md#survey-method-and-organization>)
 
 Build concise, question-driven synthesis through reviews, core close readings, and targeted related readings. Keep Unikernel under kernel architecture.

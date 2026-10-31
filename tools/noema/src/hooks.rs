@@ -2,8 +2,7 @@
 use crate::{
     check,
     context::{self, Options},
-    lock, require_complete,
-    store::{self, Overlay},
+    lock, store,
 };
 use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
@@ -70,11 +69,10 @@ pub fn run(root: &Path, event: Event) -> Result<HookOutput> {
             && !session.chars().any(char::is_control),
         "Invalid session identifier"
     );
-    let _guard = lock(root, true)?;
-    require_complete(root)?;
+    let _guard = lock(root)?;
     let mut bindings =
         store::read_json::<BTreeMap<String, String>>(root, SESSIONS)?.unwrap_or_default();
-    let checked = check::inspect(root, &Overlay::new())?;
+    let checked = check::inspect(root)?;
     let work_ids: BTreeSet<_> = checked
         .pages
         .iter()

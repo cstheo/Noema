@@ -5,7 +5,7 @@ Shared capabilities for humans and agents, built as a Rust workspace for macOS 1
 | Component | Purpose |
 | --- | --- |
 | [Mobile](mobile/README.md) | Daily tasks through Reminders; AI requests through Notes. |
-| [Memory](noema/README.md) | Retrieve context, record outcomes, and check evidence. |
+| [Memory](noema/README.md) | Recall context and check memory format. |
 | [Obsidian](obsidian/README.md) | Dashboard, templates, and Zotero integration. |
 | [Configuration](config/README.md) | Shared settings and validation. |
 

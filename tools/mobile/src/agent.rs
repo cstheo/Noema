@@ -22,7 +22,7 @@ use std::{
 const INSTRUCTIONS: &str = "You are Noema, the user's personal agent.
 Answer the request directly using relevant personal memory and sources in this
 Noema repository. Start with AGENTS.md and README.md. Consult noema/ for durable
-memory and corpus/ for original sources and personal records; select context for
+memory and corpus/ for sources and notes; select context for
 the request rather than reading everything. Respect the repository's retrieval
 conventions. If no relevant memory exists, say so rather than inventing it.
 The input arrives as JSON through stdin: conversation is the complete Notes

@@ -35,7 +35,7 @@ Both filesystems depend on Linux kernel facilities and cannot be mounted nativel
 
 The famfs project documents basic tests with simulated pmem converted to devdax, and file-backed virtual pmem shared between guests. Its examples use a Linux/libvirt host; they are evidence for the simulated-device approach, not proof that the exact recipe runs unchanged on macOS.
 
-On this arm64 Mac, QEMU 11/TCG ran x86_64 Linux 6.6 and DAXFS on simulated NVDIMM-backed devdax. The [functional experiment](../../../../projects/kernel-dev/records/2026-10-29-daxfs-functional-validation.md#results) passed 18/20 overlay checks and 10/10 mmap checks; two inspection checks failed. Famfs and arm64 guest compatibility remain untested.
+On this arm64 Mac, QEMU 11/TCG ran x86_64 Linux 6.6 and DAXFS on simulated NVDIMM-backed devdax. The functional experiment passed 18/20 overlay checks and 10/10 mmap checks; two inspection checks failed. Famfs and arm64 guest compatibility remain untested.
 
 DAXFS explicitly supports the COHERENT backend within one hardware cache-coherence domain. The CXL3 backend is a scaffold, with real cross-host atomics, publication ordering, and failure behavior still subject to validation. Its `coherence.h` routes both backends to the same current primitives and retains CXL TODOs. Selecting `mem_model=cxl3` over coherent RAM does not establish real inter-host coherence.
 
@@ -48,7 +48,7 @@ QEMU's CXL documentation describes functional device/topology emulation; it expl
 | Native macOS mounts | Unsupported by the existing implementations. |
 | DAXFS single-guest build, mount, file access, and mmap | Functional baseline completed on simulated devdax; two inspection checks remain failed. |
 | Famfs single-guest operation | Untested; requires compatible Linux/devdax and famfs support. |
-| Guest CXL bus, region provisioning, and DAX access | Pending; only [host-side topology realization](../../../../projects/kernel-dev/records/2026-10-29-cxl-environment-audit.md) was verified. |
+| Guest CXL bus, region provisioning, and DAX access | Pending; only host-side topology realization was verified. |
 | Multiple guests sharing emulated memory | A later controlled software experiment; correctness assumptions need explicit validation. |
 | Real CXL latency, bandwidth, cross-host coherence, and physical failure behavior | Requires suitable Linux/CXL hardware and topology; QEMU/TCG measurements do not reproduce those results. |
 

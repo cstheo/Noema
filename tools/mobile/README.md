@@ -29,7 +29,7 @@ Each note is one conversation. Append a follow-up on a new line below the latest
 
 Keep earlier questions and answers intact: changes to the answered prefix do not trigger a reply. Whitespace and formatting changes are ignored. New text settles before generation; edits made before delivery are checked again. The agent's own answers do not trigger another turn. Conversations over 128 KiB require a new note. Existing single-answer notes become conversation baselines on the first check after upgrading.
 
-The answer is the result: there are no status/draft folders, approval commands, automatic archives, or automatic memory writes. Existing records are preserved. Personal memory stays in the repository; the agent selects relevant context for each request.
+The answer is the result: there are no status/draft folders, approval commands, automatic archives, or automatic memory writes. Personal memory stays in the repository; the agent selects relevant context for each request.
 
 Codex runs in a read-only sandbox. Requests and retrieved excerpts reach the signed-in model service. Repository-only access is an instruction, not a filesystem read restriction. Shared, locked, or attachment-bearing Notes are unsupported. Progress and errors are available through the CLI's `status` command.
 
@@ -37,6 +37,6 @@ Codex runs in a read-only sandbox. Requests and retrieved excerpts reach the sig
 
 Reminders and journal events wake the worker; configured polling checks Notes and reconciles missed events. Obsidian can stay closed. Observer failures appear in `status`.
 
-Use `make -C tools mobile ARGS=<command>`. `run` starts a foreground worker; `uninstall` removes the LaunchAgent and preserves records, even with invalid configuration. Stop the service before a foreground run or moving the repository. Reinstall after code changes; forward `--repo /absolute/path` when needed.
+Use `make -C tools mobile ARGS=<command>`. `run` starts a foreground worker; `uninstall` removes the LaunchAgent and preserves local data, even with invalid configuration. Stop the service before a foreground run or moving the repository. Reinstall after code changes; forward `--repo /absolute/path` when needed.
 
 Follow the [configuration lifecycle](../config/README.md#apply-changes) before changing paths or names. Back up ignored `.local/` identities, bindings, and logs with the corpus and Notes. It also holds the signed app; rebuilding may require Apple permissions again.

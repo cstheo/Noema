@@ -16,7 +16,7 @@ help:
 	  '  fmt                Format Rust' \
 	  '  clean              Remove Cargo build output' \
 	  '  mobile / obsidian  Run either CLI with ARGS (default: --help)' \
-	  '  noema              Retrieve, record, and check memory' \
+	  '  noema              Recall and check memory' \
 	  '  deploy             Deploy Obsidian, then install mobile (close Obsidian first)'
 
 build:

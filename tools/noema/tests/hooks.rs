@@ -36,31 +36,51 @@ fn fixture() -> Result<TempDir> {
     for area in ["profile", "work", "insights"] {
         fs::create_dir_all(root.path().join("noema").join(area))?;
     }
-    fs::create_dir_all(root.path().join("corpus/records"))?;
-    let source = "corpus/records/seed.md";
-    let make_entry = |id: &str, text: &str| json!({"id":id,"basis":"explicit","as_of":"2026-10-28","text":text,"evidence":[{"path":source,"anchor":"request"}]});
-    let request = json!({
-        "id":"seed", "date":"2026-10-28", "path":source,
-        "body":"# Seed\n\n## Request\nKeep concise notes. Alpha and Beta are separate projects.\n\n## Handoff\nNext: finish the reader.\n",
-        "pages":[
-            {"path":"noema/profile/preferences.md","id":"profile.preferences","summary":"Writing preferences.","entries":[make_entry("concise","Keep concise notes.")]},
-            {"path":"noema/work/alpha.md","id":"work.alpha","summary":"Alpha project decisions.","aliases":["Alpha"],"resume":format!("{source}#handoff"),"entries":[make_entry("phase","Alpha uses the first execution path.")]},
-            {"path":"noema/work/beta.md","id":"work.beta","summary":"Beta project decisions.","aliases":["Beta"],"entries":[make_entry("phase","Beta uses the second execution path.")]}
-        ]
-    });
-    let input = root.path().join("seed.json");
-    fs::write(&input, serde_json::to_vec(&request)?)?;
-    let output = Command::new(env!("CARGO_BIN_EXE_noema"))
-        .arg("--root")
-        .arg(root.path())
-        .arg("record")
-        .arg(input)
-        .output()?;
-    ensure!(
-        output.status.success(),
-        "seed failed: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
+    use noema_memory::model::{Basis, Entry, Meta, Page, Status, render_page};
+    for (area, name, summary, text, handoff) in [
+        (
+            "profile",
+            "preferences",
+            "Writing preferences.",
+            "Keep concise notes.",
+            None,
+        ),
+        (
+            "work",
+            "alpha",
+            "Alpha project decisions.",
+            "Alpha uses the first execution path.",
+            Some("Next: finish the reader."),
+        ),
+        (
+            "work",
+            "beta",
+            "Beta project decisions.",
+            "Beta uses the second execution path.",
+            None,
+        ),
+    ] {
+        let page = Page {
+            path: format!("noema/{area}/{name}.md"),
+            meta: Meta {
+                id: format!("{area}.{name}"),
+                summary: summary.into(),
+                updated: "2026-10-28".into(),
+                aliases: vec![name.into()],
+                scope: vec![],
+                handoff: handoff.map(str::to_owned),
+            },
+            entries: vec![Entry {
+                id: "decision".into(),
+                basis: Basis::Explicit,
+                status: Status::Active,
+                as_of: "2026-10-28".into(),
+                text: text.into(),
+                review_after: None,
+            }],
+        };
+        fs::write(root.path().join(&page.path), render_page(&page)?)?;
+    }
     Ok(root)
 }
 
@@ -225,9 +245,7 @@ fn hook_json(root: &Path, event: Value) -> Result<Value> {
 fn recall_creates_no_review_tasks_and_close_events_are_noops() -> Result<()> {
     let root = fixture()?;
     let page = root.path().join("noema/work/alpha.md");
-    let source = root.path().join("corpus/records/seed.md");
     let before_page = fs::read(&page)?;
-    let before_source = fs::read(&source)?;
     let prompt_text = "Alpha: a temporary question that must not be stored.";
     hook(root.path(), prompt(root.path(), "one", prompt_text))?;
     let bindings = root.path().join(".local/noema/sessions.json");
@@ -245,7 +263,6 @@ fn recall_creates_no_review_tasks_and_close_events_are_noops() -> Result<()> {
         );
     }
     assert_eq!(fs::read(page)?, before_page);
-    assert_eq!(fs::read(source)?, before_source);
     assert_eq!(fs::read(&bindings)?, before_bindings);
     assert!(!fs::read_to_string(bindings)?.contains(prompt_text));
     assert_eq!(fs::read_dir(root.path().join(".local/noema"))?.count(), 1);

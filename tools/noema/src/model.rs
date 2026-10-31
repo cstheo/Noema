@@ -1,7 +1,6 @@
 use anyhow::{Context, Result, bail, ensure};
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
-use std::path::{Component, Path, PathBuf};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -22,14 +21,6 @@ pub enum Status {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
-pub struct Evidence {
-    pub path: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub anchor: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(deny_unknown_fields)]
 pub struct Meta {
     pub id: String,
     pub summary: String,
@@ -38,8 +29,6 @@ pub struct Meta {
     pub aliases: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub scope: Vec<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub resume: Option<Evidence>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub handoff: Option<String>,
 }
@@ -52,11 +41,6 @@ pub struct Entry {
     pub status: Status,
     pub as_of: String,
     pub text: String,
-    pub evidence: Vec<Evidence>,
-    #[serde(default)]
-    pub depends_on: Vec<String>,
-    #[serde(default)]
-    pub supersedes: Vec<String>,
     #[serde(default)]
     pub review_after: Option<String>,
 }
@@ -128,73 +112,6 @@ fn enum_text<T: Serialize>(value: T) -> Result<String> {
     Ok(value.as_str().context("expected string enum")?.to_owned())
 }
 
-fn relative_link(page: &str, evidence: &Evidence) -> Result<String> {
-    let parent = Path::new(page)
-        .parent()
-        .context("memory page has no parent")?;
-    let mut link = PathBuf::new();
-    for _ in parent.components() {
-        link.push("..");
-    }
-    link.push(&evidence.path);
-    let mut result = link
-        .to_str()
-        .context("source path is not UTF-8")?
-        .to_owned();
-    if let Some(anchor) = &evidence.anchor {
-        result.push('#');
-        result.push_str(anchor);
-    }
-    // Angle-bracket Markdown destinations preserve spaces and parentheses.
-    Ok(format!("[source](<{result}>)"))
-}
-
-fn parse_link(page: &str, value: &str) -> Result<(String, Option<String>)> {
-    ensure!(
-        value.starts_with('[') && value.ends_with(')'),
-        "invalid evidence link"
-    );
-    let (_, destination) = value.split_once("](").context("invalid evidence link")?;
-    let mut destination = &destination[..destination.len() - 1];
-    if destination.starts_with('<') && destination.ends_with('>') {
-        destination = &destination[1..destination.len() - 1];
-    }
-    let (path, anchor) = match destination.split_once('#') {
-        Some((path, anchor)) => {
-            ensure!(!anchor.is_empty(), "empty evidence anchor");
-            (path, Some(anchor.to_owned()))
-        }
-        None => (destination, None),
-    };
-    ensure!(
-        !path.is_empty() && !path.contains(['\\', '\n', '\r']),
-        "invalid evidence path"
-    );
-    let mut parts = Path::new(page)
-        .parent()
-        .context("memory page has no parent")?
-        .components()
-        .map(|part| part.as_os_str().to_owned())
-        .collect::<Vec<_>>();
-    for component in Path::new(path).components() {
-        match component {
-            Component::Normal(value) => parts.push(value.to_owned()),
-            Component::ParentDir => {
-                ensure!(parts.pop().is_some(), "evidence path leaves repository");
-            }
-            _ => bail!("evidence path must be relative"),
-        }
-    }
-    let resolved: PathBuf = parts.into_iter().collect();
-    Ok((
-        resolved
-            .to_str()
-            .context("source path is not UTF-8")?
-            .to_owned(),
-        anchor,
-    ))
-}
-
 fn validate_statement(text: &str) -> Result<()> {
     ensure!(!text.trim().is_empty(), "empty memory statement");
     let mut fence = Fence::default();
@@ -228,20 +145,6 @@ pub fn render_page(page: &Page) -> Result<String> {
             enum_text(entry.status)?,
             entry.as_of
         ));
-        for evidence in &entry.evidence {
-            result.push_str(&format!(
-                "- Evidence: {}\n",
-                relative_link(&page.path, evidence)?
-            ));
-        }
-        for (label, values) in [
-            ("Depends on", &entry.depends_on),
-            ("Supersedes", &entry.supersedes),
-        ] {
-            if !values.is_empty() {
-                result.push_str(&format!("- {label}: {}\n", values.join(", ")));
-            }
-        }
         if let Some(date) = &entry.review_after {
             result.push_str(&format!("- Review after: {date}\n"));
         }
@@ -282,18 +185,13 @@ pub fn parse_page(path: &str, text: &str) -> Result<Page> {
             lines.next();
         }
         let mut fields = std::collections::BTreeMap::new();
-        let mut evidence = Vec::<Evidence>::new();
         while lines.peek().is_some_and(|line| line.starts_with("- ")) {
             let line = lines.next().context("missing metadata line")?;
             let (key, value) = line[2..]
                 .split_once(": ")
                 .context("invalid entry metadata")?;
             match key {
-                "Evidence" => {
-                    let (path, anchor) = parse_link(path, value)?;
-                    evidence.push(Evidence { path, anchor });
-                }
-                "Basis" | "Status" | "As of" | "Depends on" | "Supersedes" | "Review after" => {
+                "Basis" | "Status" | "As of" | "Review after" => {
                     ensure!(
                         fields.insert(key, value).is_none(),
                         "duplicate entry field {key}"
@@ -322,12 +220,6 @@ pub fn parse_page(path: &str, text: &str) -> Result<Page> {
                 .copied()
                 .with_context(|| format!("missing {name}"))
         };
-        let list = |name| {
-            fields
-                .get(name)
-                .map(|value| value.split(',').map(str::trim).map(str::to_owned).collect())
-                .unwrap_or_default()
-        };
         let basis =
             serde_json::from_value(serde_json::Value::String(required("Basis")?.to_owned()))?;
         let status =
@@ -338,9 +230,6 @@ pub fn parse_page(path: &str, text: &str) -> Result<Page> {
             status,
             as_of: required("As of")?.to_owned(),
             text: content.join("\n").trim().to_owned(),
-            evidence,
-            depends_on: list("Depends on"),
-            supersedes: list("Supersedes"),
             review_after: fields.get("Review after").map(|date| (*date).to_owned()),
         };
         validate_statement(&entry.text)?;
@@ -358,8 +247,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn markdown_roundtrip_preserves_fences_and_source_paths() -> Result<()> {
-        let mut page = Page {
+    fn markdown_roundtrip_preserves_fences() -> Result<()> {
+        let page = Page {
             path: "noema/work/example.md".into(),
             meta: Meta {
                 id: "work.example".into(),
@@ -367,7 +256,6 @@ mod tests {
                 updated: "2026-10-28".into(),
                 aliases: vec!["示例".into()],
                 scope: vec![],
-                resume: None,
                 handoff: None,
             },
             entries: vec![Entry {
@@ -376,16 +264,9 @@ mod tests {
                 status: Status::Active,
                 as_of: "2026-10-28".into(),
                 text: "Keep this.\n\n```md\n## not-an-entry\n```".into(),
-                evidence: vec![Evidence {
-                    path: "corpus/records/source (one).md".into(),
-                    anchor: Some("request".into()),
-                }],
-                depends_on: vec![],
-                supersedes: vec![],
                 review_after: None,
             }],
         };
-        page.meta.resume = Some(page.entries[0].evidence[0].clone());
         let rendered = render_page(&page)?;
         assert_eq!(parse_page(&page.path, &rendered)?, page);
         let mut indented = page.clone();

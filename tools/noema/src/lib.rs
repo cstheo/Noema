@@ -1,10 +1,9 @@
-//! Evidence-linked Markdown memory and a checked record/context lifecycle.
+//! Markdown memory, bounded task context, and recall hooks.
 
 pub mod check;
 pub mod context;
 pub mod hooks;
 pub mod model;
-pub mod record;
 pub mod store;
 
 use anyhow::{Context, Result, bail, ensure};
@@ -14,48 +13,39 @@ use std::{
     path::{Path, PathBuf},
 };
 
-pub const PENDING: &str = ".local/noema/pending.json";
-
 pub fn repository(explicit: Option<&Path>) -> Result<PathBuf> {
     if let Some(path) = explicit {
         let root = path.canonicalize().context("Resolve Noema root")?;
         ensure!(
-            root.join("noema").is_dir() && root.join("corpus").is_dir(),
-            "Expected noema/ and corpus/ in {}",
+            has_memory(&root),
+            "Expected noema/profile, noema/work, or noema/insights in {}",
             root.display()
         );
         return Ok(root);
     }
     let cwd = std::env::current_dir()?;
     for path in cwd.ancestors() {
-        if path.join("noema").is_dir() && path.join("corpus").is_dir() {
+        if has_memory(path) {
             return Ok(path.canonicalize()?);
         }
     }
     let compiled = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    if compiled.join("noema").is_dir() && compiled.join("corpus").is_dir() {
+    if has_memory(&compiled) {
         return Ok(compiled.canonicalize()?);
     }
     bail!("No Noema repository found; supply --root")
 }
 
-/// Directory locks coordinate readers and writers without creating reader state.
-pub fn lock(root: &Path, write: bool) -> Result<File> {
-    let directory = store::safe_path(root, "noema")?;
-    let file = File::open(directory).context("Open memory directory")?;
-    if write {
-        FileExt::try_lock_exclusive(&file)
-    } else {
-        FileExt::try_lock_shared(&file)
-    }
-    .context("Another Noema operation is running; retry when it finishes")?;
-    Ok(file)
+fn has_memory(root: &Path) -> bool {
+    ["profile", "work", "insights"]
+        .iter()
+        .any(|area| root.join("noema").join(area).is_dir())
 }
 
-pub fn require_complete(root: &Path) -> Result<()> {
-    ensure!(
-        !store::safe_path(root, PENDING)?.exists(),
-        "Incomplete record: run `noema record --recover` before reading memory"
-    );
-    Ok(())
+/// Serialize hook binding updates without creating a lock file.
+pub(crate) fn lock(root: &Path) -> Result<File> {
+    let file = File::open(store::safe_path(root, "noema")?).context("Open memory directory")?;
+    FileExt::try_lock_exclusive(&file)
+        .context("Another Noema hook is running; retry when it finishes")?;
+    Ok(file)
 }

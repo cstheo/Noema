@@ -52,7 +52,7 @@ Include older DSM/PGAS, NUMA, RDMA, and persistent-memory antecedents when citat
 
 ## Collected topic map
 
-The [initial library review](records/2026-10-29-cxl-library-review.md#inventory-findings) grouped collected titles and selected stored abstracts. This is a navigation aid, not a completed synthesis or a selected research agenda.
+This map groups collected titles and selected stored abstracts. This is a navigation aid, not a completed synthesis or a selected research agenda.
 
 | Question | Collected examples |
 | --- | --- |
@@ -138,6 +138,6 @@ Sources accessed 2026-10-29; selected architecture/abstract passages informed th
 
 ## Local experiments
 
-See [DAXFS functional validation](../../../projects/kernel-dev/records/2026-10-29-daxfs-functional-validation.md) and [CXL environment audit](../../../projects/kernel-dev/records/2026-10-29-cxl-environment-audit.md). Their single-guest results do not establish multi-host CXL behavior or hardware performance.
+The [environment notes](techniques/cxl-environments.md) summarize the current validation limits. Single-guest results do not establish multi-host CXL behavior or hardware performance.
 
 [Memory Systems](README.md)

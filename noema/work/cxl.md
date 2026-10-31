@@ -19,7 +19,6 @@ handoff: Select a research question and its smallest falsification experiment. D
 - Basis: explicit
 - Status: active
 - As of: 2026-10-29
-- Evidence: [source](<../../corpus/research/system/memory/techniques/cxl-environments.md#request>)
 
 The selected filesystem studies are DAXFS and Micron famfs.
 
@@ -28,7 +27,5 @@ The selected filesystem studies are DAXFS and Micron famfs.
 - Basis: observed
 - Status: active
 - As of: 2026-10-29
-- Evidence: [source](<../../corpus/projects/kernel-dev/records/2026-10-29-daxfs-functional-validation.md#results>)
-- Evidence: [source](<../../corpus/projects/kernel-dev/records/2026-10-29-daxfs-functional-validation.md#boundary>)
 
 DAXFS filesystem and mmap cases passed in a single QEMU guest using NVDIMM-backed devdax; two inspection-tool cases failed and the overall run returned nonzero. Guest CXL discovery, multi-host behavior, crash recovery, hardware performance, and famfs remain unverified.

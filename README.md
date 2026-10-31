@@ -6,11 +6,11 @@ An AI-native personal system for knowledge, memory, and action.
 
 | Component | Purpose |
 | --- | --- |
-| [Corpus](corpus/README.md) | Sources and personal records. |
+| [Corpus](corpus/README.md) | Sources and personal notes. |
 | [Tools](tools/README.md) | Shared capabilities for humans and agents. |
-| [Noema](noema/README.md) | Evidence-linked memory, insights, and task context. |
+| [Noema](noema/README.md) | Memory, insights, and task context. |
 
-Agents [recall](tools/noema/skills/noema-recall/SKILL.md) relevant context and [consolidate](tools/noema/skills/noema-consolidate/SKILL.md) only information that changes future work. Records preserve significant evidence; memory and handoffs stay current.
+Agents [recall](tools/noema/skills/noema-recall/SKILL.md) relevant context and [consolidate](tools/noema/skills/noema-consolidate/SKILL.md) only information that changes future work. Memory and handoffs stay concise and current.
 
 Use [Workspace](workspace/README.md) for local development and artifact reproduction.
 
@@ -20,9 +20,9 @@ Initialize source checkouts with `git submodule update --init`; initialize neste
 %%{init: {"theme": "base", "themeVariables": {"fontFamily": "Inter, system-ui, sans-serif", "fontSize": "16px", "lineColor": "#94a3b8", "edgeLabelBackground": "#ffffff"}, "flowchart": {"curve": "basis", "nodeSpacing": 40, "rankSpacing": 44, "padding": 20}}}%%
 flowchart LR
 
-    C("<b>Corpus</b><br/>Sources & records")
+    C("<b>Corpus</b><br/>Sources & notes")
     N("<b>Noema</b><br/>Knowledge, memory & insights")
-    X("<b>Task context</b><br/>Selected evidence & memory")
+    X("<b>Task context</b><br/>Selected notes & memory")
     A("<b>Agent</b><br/>Reason & act")
     T("<b>Tools</b><br/>Retrieve · act · verify")
 
@@ -31,8 +31,8 @@ flowchart LR
     N --> X
     X --> A
     A -->|Invoke| T
-    T -.->|Record actual outcomes| C
-    T -.->|Update & validate| N
+    T -.->|Develop notes| C
+    A -.->|Refine memory| N
 
     classDef corpus fill:#eff6ff,stroke:#93c5fd,color:#1e3a5f,stroke-width:1.5px,rx:14,ry:14
     classDef memory fill:#f5f3ff,stroke:#c4b5fd,color:#4c1d95,stroke-width:1.5px,rx:14,ry:14

@@ -1,29 +1,27 @@
 ---
 name: noema-consolidate
-description: Preserve durable user corrections, decisions, significant experiment results, supported insights, or essential continuation when they change future work; skip routine activity.
+description: Keep lasting user preferences, decisions, useful insights, and essential continuation current; skip routine activity.
 ---
 
 # Noema Consolidate
 
-Ask what a future task would lose if this information were not saved. Without a concrete answer, stop without writing. Routine answers, recall, checks, reviews, commits, document edits, and session closure do not justify a record.
+Ask what a future task would lose if this information were omitted. Without a concrete answer, stop without writing. Routine answers, recall, checks, reviews, commits, document edits, and session closure need no memory update.
 
 Use the supplied Noema root, or resolve this skill's real path to the repository containing `corpus/`, `noema/`, and `tools/`.
 
-## Choose one home
+## Choose the smallest useful change
 
-Read the relevant artifact first. Edit only when meaningful new information changes it; unchanged content needs no write.
+Read the existing page first. Edit only when meaningful new information changes it.
 
-- **Records:** significant experiments, original user corrections, consequential decisions, or external changes with recovery evidence. Keep the result, necessary method, limits, and source pointers. Give each significant new experiment a new record; reference prior results without rewriting them.
-- **Research notes:** technical explanations, paper synthesis, and candidate questions. Edit notes directly in place and link them from the field or project; no record request is needed.
-- **Memory:** lasting preferences, decisions, constraints, or supported conclusions that improve later work. Repository rules stay in AGENTS.md; Work describes current state.
-- **Handoff:** only the goal, unresolved constraint, next action, and evidence needed to continue. Refresh it without creating an event log.
+- **Profile:** lasting personal background and preferences.
+- **Work:** current goals, decisions, constraints, and useful results.
+- **Insights:** reusable conclusions connecting tasks or research.
+- **Handoff:** a short continuation with the unresolved constraint and next action.
 
-Preserve source language, dates, and evidence. Distinguish user choices, observed results, and assistant proposals. Collected material and generated explanations do not establish reading or mastery.
+Keep statements self-contained. Link related Corpus fields or projects when useful. Distinguish explicit user choices, observations, and inferences. Collected material and generated explanations do not establish reading or mastery. Repository rules belong in AGENTS.md; technical explanations and paper synthesis belong in Corpus notes.
 
-## Save the smallest useful change
+## Edit directly
 
-Records, memory, and handoffs can be updated independently. Reuse existing Corpus evidence. Do not invent a memory claim to save an experiment or create a record just to refresh memory or continuation.
+Follow the [memory page format](../../../../noema/README.md#pages). Update existing entries, remove obsolete detail, and refresh `handoff` only when continuation changes. Memory and handoff updates are independent; neither needs a separate source artifact.
 
-For record, memory, or handoff publication, follow the [write protocol](../../README.md#change-sets): inspect current pages, dry-run, publish, then run `check`. Correct relevant memory only where missing or wrong, and review affected conclusions. Git retains edit history.
-
-Report meaningful changes briefly. Skipping writes nothing.
+Apply corrections to affected conclusions and dates, then run the [CLI](../../README.md) `check`. Git retains history. Report meaningful changes briefly; skipping writes nothing.
